@@ -54,7 +54,12 @@ const stamp = Date.now().toString(36);
 fs.readdirSync(OUT).filter((f) => f.endsWith('.html')).forEach((f) => {
   const file = path.join(OUT, f);
   const s = fs.readFileSync(file, 'utf8');
-  const t = s.replace(/src="demo\/(demo-[a-z]+\.js)(\?v=[\w]+)?"/g, 'src="demo/$1?v=' + stamp + '"');
+  let t = s.replace(/src="demo\/(demo-[a-z]+\.js)(\?v=[\w]+)?"/g, 'src="demo/$1?v=' + stamp + '"');
+  // The demo's own pages also load the shared site files; stamp those too.
+  if (OWN.indexOf(f) !== -1) {
+    t = t.replace(/src="(config|admin)\.js(\?v=[\w]+)?"/g, 'src="$1.js?v=' + stamp + '"')
+      .replace(/href="styles\.css(\?v=[\w]+)?"/g, 'href="styles.css?v=' + stamp + '"');
+  }
   if (t !== s) fs.writeFileSync(file, t);
 });
 
