@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>How it works · Sweet Nothings by M (portfolio demo)</title>
+<meta name="description" content="The rules and flows behind the Sweet Nothings by M ordering site and owner admin: ordering, approvals, payments, classes, reminders and messages.">
+<link rel="icon" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .doc { max-width: 860px; }
+  .doc h2 { margin: 44px 0 6px; }
+  .doc .sub { color: var(--muted); margin: 0 0 16px; }
+  .faq-a { white-space: normal; }
+  .faq-a p { margin: 0 0 10px; }
+  .faq-a ul { margin: 0 0 10px; padding-left: 20px; }
+  .faq-a li { margin: 4px 0; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--coral-dark); background: var(--blush); border-radius: 999px; padding: 2px 9px; margin-right: 6px; vertical-align: 2px; }
+  .try { background: var(--white); border-radius: 14px; padding: 16px 20px; margin: 20px 0 0; }
+</style>
+</head>
+<body>
+<main>
+  <section class="hero wrap doc">
+    <p class="eyebrow">Portfolio demo · How it works</p>
+    <h1>Every rule, flow and email behind the site</h1>
+    <p class="lead">Sweet Nothings by M is a home bakery run by one person. The site takes cookie orders and class bookings around her real limits: her lead time, how many cookies she can bake in a week, and which towns she can drive to. The admin lets her run it all from her phone. These are the rules I built in, grouped by who sees them.</p>
+    <div class="try"><strong>Try it:</strong> place an order on the <a href="index.html">customer site</a> (code <code>DEMO10</code> takes 10% off), then open the <a href="admin.html">owner admin</a> to review and approve it.</div>
+  </section>
+
+  <section class="section wrap doc">
+    <h2>Ordering cookies</h2>
+    <p class="sub">What the customer sees, and the checks behind it.</p>
+    <div class="faq-list">
+      <details class="faq"><summary>What can people order, and how is it priced?</summary><div class="faq-a">
+        <ul>
+          <li><strong>Custom Cookies</strong>: decorated to a theme, from $5 per cookie, 1 dozen minimum, up to 6 different designs. Customers describe the set and can attach up to 5 inspiration photos. The price is an estimate; Melissa confirms the final price when she approves.</li>
+          <li><strong>Mini and Large Artisan</strong>: $24 and $36 a dozen, by flavor. Up to 4 flavors per order, or up to 6 once it reaches 2 dozen. The flavor list, prices and "Special" badges all come from the admin.</li>
+        </ul>
+        <p>Photos are shrunk in the browser before they're sent, and a note explains that AI-generated inspiration images can't be copied exactly in icing.</p>
+      </div></details>
+      <details class="faq"><summary>How far ahead do people have to order?</summary><div class="faq-a">
+        <p><span class="tag">Rule</span>At least <strong>14 days</strong> out (a setting). Checkout refuses earlier dates, any day Melissa has blocked off (vacations, holidays), and any week that's already full.</p>
+        <p><span class="tag">Rule</span><strong>Weekly limits</strong>: up to 50 custom and 75 artisan cookies per week (Monday to Sunday), counting orders she's already approved. If an order would push a week over, the customer is told how many cookies that week still has room for.</p>
+        <p>Need them sooner? A "Rush orders" note sends them to the Contact page with the topic pre-picked, and Melissa can then add the order herself (see phone orders below).</p>
+      </div></details>
+      <details class="faq"><summary>Pickup or drop-off?</summary><div class="faq-a">
+        <ul>
+          <li><strong>Pickup</strong> is free, in Rosemont. The exact address is only shared in the confirmation email, never on the site.</li>
+          <li><strong>Drop-off</strong> works by ZIP code: each ZIP in her area has its own fee ($5 to $10). Outside the area, the customer is offered a meet-up spot inside it, or pickup.</li>
+          <li>Everyone gives a <strong>best pickup or drop-off window</strong> (15-minute time choices), because she bakes from home with young kids and arranges each handoff. Event time and allergies are optional.</li>
+        </ul>
+      </div></details>
+      <details class="faq"><summary>Codes, gift cards and tax</summary><div class="faq-a">
+        <p><strong>Promo codes</strong> take a percentage off. <strong>Gift cards</strong> carry a balance: they come off the invoice when Melissa approves the order, or at checkout for a class, and a released class spot puts the amount back. Codes can expire or be limited to a number of uses.</p>
+        <p><strong>Sales tax</strong> isn't guessed by the site. Totals show "before tax", and QuickBooks adds the right tax on the invoice, by address and item type.</p>
+      </div></details>
+      <details class="faq"><summary>What stops mistakes at checkout?</summary><div class="faq-a">
+        <ul>
+          <li>Send stays greyed out and lists exactly what's still needed.</li>
+          <li><strong>Email typo check</strong>: "<code>@gmial.com</code>" or "<code>.cm</code>" gets "Are you sure? Did you mean …@gmail.com?" with a one-tap fix, and the server refuses unusual email endings too.</li>
+          <li>Phone numbers are formatted as you type; double-clicking Send can never create two orders; a dropped connection retries safely.</li>
+          <li>Every rule is checked again on the server, so the website can't be tricked into a bad order.</li>
+        </ul>
+      </div></details>
+      <details class="faq"><summary>What does the customer get after ordering?</summary><div class="faq-a">
+        <p>A clear <strong>"request received, not confirmed yet"</strong> email with an estimate and what happens next. The date isn't reserved until Melissa approves and the invoice is paid. Melissa gets her own alert, with any allergy shown at the top.</p>
+      </div></details>
+    </div>
+
+    <h2>Running orders (the owner admin)</h2>
+    <p class="sub">What Melissa does, usually from her phone.</p>
+    <div class="faq-list">
+      <details class="faq"><summary>Reviewing, approving and declining</summary><div class="faq-a">
+        <p>New requests show as <strong>Pending review</strong>. Review shows everything she needs (allergies, photos, the week's totals, any limit it would push past) and an editable invoice: change prices, add lines, add a note.</p>
+        <p><strong>Approve &amp; email</strong> creates a real <strong>QuickBooks invoice</strong> and emails the confirmation with a Pay button. <strong>Decline</strong> sends a kind note instead. Nothing is charged until she approves.</p>
+      </div></details>
+      <details class="faq"><summary>How do orders get marked paid?</summary><div class="faq-a">
+        <p>Every 5 minutes the server checks QuickBooks and Square and marks paid orders <strong>Paid</strong> on its own. From there she moves an order through Baking, Ready and Completed. Cancelling an approved order voids its unpaid invoice and puts any gift card amount back.</p>
+      </div></details>
+      <details class="faq"><summary>Pickup and drop-off times, and reminders</summary><div class="faq-a">
+        <p>Once she's agreed a time with the customer, <strong>Set pickup time</strong> emails it with the address (or their drop-off address) and her cell. On the <strong>morning before</strong> (8 AM), the customer gets a reminder automatically. It goes out only once, and is skipped if the time was set for the next day.</p>
+      </div></details>
+      <details class="faq"><summary>Phone orders (and rush orders)</summary><div class="faq-a">
+        <p><strong>+ Add phone order</strong> is the whole checkout inside the admin, for orders agreed on a call. Any date is allowed (rush, blocked day, full week); smaller orders, extra flavors or an out-of-area drop-off just ask "Just checking". She can set the agreed price per cookie, add a rush fee line and a note.</p>
+        <p><strong>Create &amp; approve</strong> does it all in one step: the customer gets only the confirmation and invoice, never a "request received" email.</p>
+      </div></details>
+      <details class="faq"><summary>Other things she can do on an order</summary><div class="faq-a">
+        <ul>
+          <li><strong>Message the customer</strong> (the email includes the order summary; replies come straight to her).</li>
+          <li><strong>Change the date</strong>, with or without telling the customer.</li>
+          <li>The dashboard shows the week's bake list, totals against her limits, and anything that needs attention.</li>
+        </ul>
+      </div></details>
+    </div>
+
+    <h2>Classes</h2>
+    <div class="faq-list">
+      <details class="faq"><summary>How does booking a class work?</summary><div class="faq-a">
+        <p>Customers book from the class's details panel (description, location with a directions link, flyer) and pay right away through <strong>Square</strong>. Spots left are shown live and can't be overbooked.</p>
+        <p><span class="tag">Rule</span>Their spot is <strong>held for 15 minutes</strong> while they pay. If the payment doesn't come through, the hold expires: the spot is released, the Square payment link is closed so it can't be paid later, any gift card amount goes back, and the customer gets a friendly "your spot wasn't held" email with a link to book again.</p>
+      </div></details>
+      <details class="faq"><summary>What's in the class confirmation?</summary><div class="faq-a">
+        <p>The class details, the location with a directions link, the flyer, and <strong>Add to Google Calendar</strong> and <strong>Add to Apple / Outlook</strong> buttons, which open in the right app for the person's phone or computer.</p>
+      </div></details>
+    </div>
+
+    <h2>Messages</h2>
+    <div class="faq-list">
+      <details class="faq"><summary>How do customer messages work?</summary><div class="faq-a">
+        <p>The Contact page (with topics like Rush order and photos) and a quick "Message me" pop-up both land in the admin's <strong>Messages</strong> tab and in her inbox. She can reply from the admin (it quotes their message and goes out from the shop's email) or open a ready-made reply in Gmail.</p>
+      </div></details>
+    </div>
+
+    <h2>Running the site</h2>
+    <div class="faq-list">
+      <details class="faq"><summary>What can she change without a developer?</summary><div class="faq-a">
+        <ul>
+          <li>All the wording and photos on every page, the home page slideshow and "What I make" list, the FAQ, the gallery and the events.</li>
+          <li>Prices, minimums, flavor list and limits, lead time, weekly limits, blocked dates, drop-off ZIPs and fees, and codes.</li>
+          <li><strong>Preview changes</strong> shows the site with her edits before customers see them.</li>
+          <li><strong>Maintenance mode</strong> shows visitors a "back soon" page while she (with a password) can still use the site.</li>
+        </ul>
+      </div></details>
+      <details class="faq"><summary>How are updates tested?</summary><div class="faq-a">
+        <p>There's a separate <strong>test site</strong> with its own test Sheet, test QuickBooks and Square sandbox. Every change goes there first and runs through a written test plan, and automated tests cover the server rules (over 200 checks). Only then is it promoted to the live site.</p>
+      </div></details>
+    </div>
+    <p style="margin-top:40px"><a class="btn" href="how-its-built.html">How it’s built →</a></p>
+  </section>
+</main>
+<script src="demo/demo-db.js"></script>
+<script src="demo/demo-server.js"></script>
+<script src="config.js"></script>
+<script src="demo/demo-after.js"></script>
+</body>
+</html>

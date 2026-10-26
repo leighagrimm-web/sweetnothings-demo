@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Sweet Nothings by M · Custom &amp; Artisan Cookies</title>
+<meta name="description" content="Custom decorated and artisan cookies by Sweet Nothings by M. Pickup in Rosemont, IL or local drop-off.">
+<link rel="icon" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=20261027u">
+</head>
+<body data-page="home">
+<div id="site-header"></div>
+
+<main>
+  <section class="landing-hero">
+    <div class="wrap landing-hero-grid">
+      <div>
+        <p class="eyebrow">Custom &amp; artisan cookies · <span id="pickup-city">Rosemont, IL</span></p>
+        <h1 id="home-title"></h1>
+        <p class="lead" id="home-intro"></p>
+        <div class="row-gap" style="margin-top:26px;gap:12px">
+          <a class="btn btn-lg" href="order.html">Start your order</a>
+          <a class="btn ghost btn-lg" href="gallery.html">See past creations</a>
+        </div>
+        <p class="hint" style="margin-top:14px">Please order at least <span id="lead-days">14</span> days ahead.</p>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <div class="hero-photo" id="hero-photo"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap" id="special-wrap" hidden style="margin-top:8px">
+    <div class="special">
+      <span id="special-icon"></span>
+      <div><strong>Special:</strong> <span id="special-text"></span></div>
+    </div>
+  </section>
+
+  <section class="section wrap" aria-labelledby="make-h">
+    <h2 id="make-h">What I make</h2>
+    <p class="make-intro" id="make-intro"></p>
+    <div class="make-grid">
+      <div class="make-feature">
+        <div class="make-feature-photo" id="make-custom-photo"></div>
+        <a class="make-feature-text" href="order.html?add=custom">
+          <div><h3>Custom cookies</h3><p>Decorated to your theme · from <span id="p-custom">$5.00</span> each</p></div>
+          <span class="make-go">Start a custom order →</span>
+        </a>
+      </div>
+      <ul class="make-list" id="make-list"></ul>
+    </div>
+    <a class="make-events" href="events.html" data-page-link><span id="make-events-line"></span><span class="make-go">See special events →</span></a>
+  </section>
+
+  <section class="band" aria-labelledby="how-h">
+    <div class="wrap">
+      <h2 id="how-h" style="font-size:34px;margin-bottom:22px">How ordering works</h2>
+      <ol class="how-steps">
+        <li><strong>Choose your cookies</strong><span>Pick custom, mini or large artisan, and tell me about your event.</span></li>
+        <li><strong>Send your request</strong><span>You’ll get an email right away. Nothing is charged yet.</span></li>
+        <li><strong>I confirm &amp; invoice</strong><span>I review your order and email your confirmation with the final price.</span></li>
+        <li><strong>Pay &amp; enjoy</strong><span>Your date is locked in once paid. Pick up in <span class="pickup-city">Rosemont</span> or choose drop-off.</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section wrap" aria-labelledby="gal-h">
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:18px">
+      <h2 id="gal-h" style="margin:0">Recent creations</h2>
+      <a href="gallery.html" style="font-weight:600">View the gallery</a>
+    </div>
+    <div class="gallery-grid" id="recent"></div>
+  </section>
+
+  <section class="wrap" style="padding-bottom:72px">
+    <div class="cta-split">
+      <div class="content-card" data-page-link>
+        <h2 style="font-size:28px;margin-bottom:8px">Have a question?</h2>
+        <p class="muted">Ingredients, allergies, pickup and more.</p>
+        <a class="btn ghost" href="faq.html">Read the FAQ</a>
+      </div>
+      <div class="content-card">
+        <h2 style="font-size:28px;margin-bottom:8px">Have a design idea?</h2>
+        <p class="muted">Send a message and I’ll get back to you.</p>
+        <a class="btn ghost" href="contact.html">Contact me</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="site-footer"></div>
+<script src="demo/demo-db.js"></script>
+<script src="demo/demo-server.js"></script>
+<script src="config.js?v=20261027u"></script>
+<script src="demo/demo-after.js"></script>
+<script src="layout.js?v=20261027u"></script>
+<script src="order.js?v=20261027u"></script>
+<script>
+SN.ready.then(function () {
+  const cfg = SN.load();
+  const m = SN.money;
+  const p = cfg.pages;
+  // Wording and photos from the Sheet's Pages tab; "Recent creations" = the first 4 Gallery photos.
+  document.getElementById('home-title').textContent = p.homeTitle;
+  document.getElementById('home-intro').textContent = p.homeIntro;
+  const heroUrl = SN.photoUrl(p.homeHeroPhoto);
+  document.getElementById('hero-photo').innerHTML = heroUrl
+    ? '<img src="' + SN.esc(heroUrl) + '" alt="' + SN.esc(p.homeTitle) + '" class="hero-img">'
+    : (SN.photoPlaceholder(p.homeHeroPhoto) ? '<span class="tag">' + SN.esc(SN.photoPlaceholder(p.homeHeroPhoto)) + '</span>' : '') + '<img src="logo.png" alt="" class="hero-logo">';
+  // "What I make": Custom cookies as the feature, then the short list Melissa edits (admin → Website pages).
+  const pageText = (k) => (p[k] != null ? p[k] : SN_DEFAULTS.pages[k]) || '';
+  document.getElementById('make-intro').textContent = pageText('homeMakeIntro');
+  document.getElementById('make-events-line').textContent = pageText('homeEventsLine') || 'Classes and pop-up events';
+  const photoBox = (photo, alt) => {
+    const url = SN.photoUrl(photo);
+    return url ? '<img src="' + SN.esc(url) + '" alt="' + SN.esc(alt) + '">' : '<img src="logo.png" alt="" class="make-logo">';
+  };
+  // Custom cookies photo: a slideshow when Melissa adds slideshow photos (admin → Website pages), else the menu photo.
+  let slides = cfg.homeSlides;
+  if (typeof slides === 'string') { try { slides = JSON.parse(slides); } catch (e) { slides = null; } }
+  slides = (Array.isArray(slides) ? slides : []).map((x) => SN.photoUrl(x && x.photo)).filter(Boolean);
+  const customBox = document.getElementById('make-custom-photo');
+  if (slides.length < 2) customBox.innerHTML = '<a href="order.html?add=custom" class="make-photo-link" tabindex="-1">' + photoBox(slides[0] || (cfg.images && cfg.images.custom), 'Custom cookies') + '</a>';
+  else {
+    // Visitors can click the photo or the arrows to move on; it also advances by itself every 4.5 seconds.
+    const ARROW = (d) => '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="' + (d < 0 ? 'M15 5l-7 7 7 7' : 'M9 5l7 7-7 7') + '" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    customBox.innerHTML = slides.map((u, i) => '<img src="' + SN.esc(u) + '" alt="Custom cookies, photo ' + (i + 1) + ' of ' + slides.length + '" class="slide' + (i ? '' : ' on') + '">').join('') +
+      '<button type="button" class="make-arrow prev" data-step="-1" aria-label="Previous photo">' + ARROW(-1) + '</button>' +
+      '<button type="button" class="make-arrow next" data-step="1" aria-label="Next photo">' + ARROW(1) + '</button>' +
+      '<span class="make-dots">' + slides.map((u, i) => '<button type="button" data-go="' + i + '" aria-label="Photo ' + (i + 1) + '"' + (i ? '' : ' class="on"') + '></button>').join('') + '</span>';
+    const imgs = customBox.querySelectorAll('img'), dots = customBox.querySelectorAll('.make-dots button');
+    let at = 0, paused = false, timer = null;
+    const show = (n) => {
+      imgs[at].classList.remove('on'); dots[at].classList.remove('on');
+      at = (n + imgs.length) % imgs.length;
+      imgs[at].classList.add('on'); dots[at].classList.add('on');
+    };
+    const autoplay = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const restart = () => { if (!autoplay) return; clearInterval(timer); timer = setInterval(() => { if (!paused && !document.hidden) show(at + 1); }, 4500); };
+    customBox.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-step], [data-go]');
+      show(b ? (b.dataset.go != null ? Number(b.dataset.go) : at + Number(b.dataset.step)) : at + 1);
+      restart();
+    });
+    customBox.addEventListener('mouseenter', () => { paused = true; });
+    customBox.addEventListener('mouseleave', () => { paused = false; });
+    customBox.classList.add('is-slideshow');
+    restart();
+  }
+  const LINK = {
+    custom: ['order.html?add=custom', 'Order'], mini: ['order.html?add=mini', 'Order'], large: ['order.html?add=large', 'Order'],
+    order: ['order.html', 'Order'], events: ['events.html', 'See events'], contact: ['contact.html', 'Ask about it'], message: ['', 'Message me']
+  };
+  // A blank line shows the live price (mini, large, custom); a blank photo uses that item's menu photo.
+  const autoLine = (k) => (k === 'mini' ? m(cfg.miniPerDozen) + ' / dozen' : k === 'large' ? m(cfg.largePerDozen) + ' / dozen' : k === 'custom' ? 'from ' + m(SN.customPrice(cfg)) + ' each' : '');
+  // An older Apps Script version sends the list as text; read it either way, else use the starting list.
+  let homeItems = cfg.homeItems;
+  if (typeof homeItems === 'string') { try { homeItems = JSON.parse(homeItems); } catch (e) { homeItems = null; } }
+  if (!Array.isArray(homeItems)) homeItems = SN_DEFAULTS.homeItems;
+  document.getElementById('make-list').innerHTML = homeItems.filter((it) => it && (it.name || '').trim()).map((it) => {
+    const link = LINK[it.link] || LINK.order;
+    const inner = '<span class="make-thumb">' + photoBox(it.photo || (cfg.images && cfg.images[it.link]), it.name) + '</span>' +
+      '<span class="make-row-text"><strong>' + SN.esc(it.name) + '</strong><span>' + SN.esc((it.line || '').trim() || autoLine(it.link)) + '</span></span>' +
+      '<span class="make-go">' + link[1] + ' →</span>';
+    return '<li>' + (it.link === 'message'
+      ? '<button type="button" class="make-row" data-quick-message="' + SN.esc(it.name) + '">' + inner + '</button>'
+      : '<a class="make-row" href="' + link[0] + '">' + inner + '</a>') + '</li>';
+  }).join('');
+  document.getElementById('recent').innerHTML = (cfg.gallery || []).slice(0, 4).map((g) => SN.photoHtml(g.photo, g.caption, 'aspect-ratio:1/1;border-radius:14px')).join('');
+  document.getElementById('recent').closest('section').hidden = !(cfg.gallery || []).length;
+  document.getElementById('lead-days').textContent = cfg.leadDays;
+  document.getElementById('pickup-city').textContent = cfg.pickupCity;
+  document.querySelectorAll('.pickup-city').forEach((el) => { el.textContent = cfg.pickupCity.split(',')[0]; });
+  document.getElementById('p-custom').textContent = m(SN.customPrice(cfg));
+  if (SN.specialActive(cfg)) {
+    document.getElementById('special-wrap').hidden = false;
+    document.getElementById('special-icon').innerHTML = SN_ICONS.star;
+    document.getElementById('special-text').textContent = cfg.specialText;
+  }
+});
+</script>
+</body>
+</html>

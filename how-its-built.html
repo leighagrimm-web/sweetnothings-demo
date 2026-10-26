@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>How it’s built · Sweet Nothings by M (portfolio demo)</title>
+<meta name="description" content="The tech stack behind the Sweet Nothings by M ordering site and owner admin, and why each piece was chosen.">
+<link rel="icon" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .doc { max-width: 900px; }
+  .doc h2 { margin: 48px 0 8px; }
+  .doc p { line-height: 1.65; }
+  .doc .muted { color: var(--muted); }
+  .flow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 22px 0 6px; }
+  .flow > div { background: var(--white); border-radius: 14px; padding: 16px 18px; }
+  .flow strong { display: block; font-size: 15px; margin-bottom: 4px; }
+  .flow span { color: var(--muted); font-size: 14px; line-height: 1.5; display: block; }
+  .flow .wide { grid-column: 1 / -1; background: var(--blush); }
+  .stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .pick { background: var(--white); border-radius: 14px; padding: 18px 20px; }
+  .pick h3 { font-size: 22px; margin: 0 0 4px; }
+  .pick .what { color: var(--coral-dark); font-weight: 600; font-size: 14px; margin: 0 0 8px; }
+  .pick p { margin: 0; color: var(--muted); }
+  .facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+  .facts div { background: var(--white); border-radius: 14px; padding: 14px 16px; }
+  .facts b { display: block; font-family: var(--serif); font-size: 30px; line-height: 1.1; }
+  .facts small { color: var(--muted); font-size: 13px; }
+  table.cost { width: 100%; border-collapse: collapse; background: var(--white); border-radius: 14px; overflow: hidden; font-size: 15px; }
+  table.cost td { padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.cost tr:last-child td { border-bottom: 0; }
+  table.cost td:last-child { text-align: right; white-space: nowrap; font-weight: 600; }
+  @media (max-width: 760px) { .flow, .facts { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+</style>
+</head>
+<body>
+<main>
+  <section class="hero wrap doc">
+    <p class="eyebrow">Portfolio demo · How it’s built</p>
+    <h1>A real ordering system on a small-business budget</h1>
+    <p class="lead">The brief: let customers order custom cookies and book classes online, around a home baker’s real limits; take payment; and give the owner one place to run it all from her phone, with no monthly software bill and nothing she has to maintain.</p>
+    <div class="facts">
+      <div><b>$0</b><small>a month for hosting, database and email</small></div>
+      <div><b>~7,800</b><small>lines of hand-written code, no framework</small></div>
+      <div><b>200+</b><small>automated checks on the server rules</small></div>
+      <div><b>2</b><small>environments: test and live, kept identical</small></div>
+    </div>
+  </section>
+
+  <section class="section wrap doc">
+    <h2>How the pieces fit</h2>
+    <div class="flow">
+      <div><strong>Website</strong><span>Static HTML, CSS and JavaScript on Cloudflare Pages. Menu, checkout, classes, contact.</span></div>
+      <div><strong>Server</strong><span>Google Apps Script: checks every order against the rules, sends emails, runs a 5-minute background check.</span></div>
+      <div><strong>Data</strong><span>A Google Sheet: orders, messages, settings, codes. The owner can open it like any spreadsheet.</span></div>
+      <div><strong>Owner admin</strong><span>Served by Apps Script, only to the owner’s Google account. Its look and logic load from the website.</span></div>
+      <div><strong>QuickBooks Online</strong><span>Invoices for cookie orders, with automatic sales tax and an online Pay button.</span></div>
+      <div><strong>Square</strong><span>Instant card checkout for class bookings, with a timed hold on the spot.</span></div>
+      <div class="wide"><strong>Customer → website → server → Sheet</strong><span>The website never holds secrets. Payment keys live only in the server’s private settings, and the server re-checks everything the website sends.</span></div>
+    </div>
+
+    <h2>Why each piece</h2>
+    <div class="stack">
+      <div class="pick"><h3>Plain HTML, CSS and JavaScript</h3><p class="what">Instead of: React, a site builder, or an ecommerce platform</p>
+        <p>The site is small, but the rules are unusual (weekly baking limits, flavor limits, ZIP-based drop-off, class holds), which off-the-shelf shops don’t handle. Plain files load fast, have no build step or dependencies to update, and will still run in ten years. Shared pieces (the bag, header, settings loader) are reused across every page.</p></div>
+      <div class="pick"><h3>Google Sheet + Apps Script as the back end</h3><p class="what">Instead of: a database and a hosted server</p>
+        <p>It’s free, it runs on Google’s infrastructure, and the owner can see and fix her own data in a tool she already knows. Google handles the admin’s login: only her account can open it. Emails go out from her own Gmail, so replies come straight back to her.</p></div>
+      <div class="pick"><h3>QuickBooks for cookie orders, Square for classes</h3><p class="what">Two payment tools, on purpose</p>
+        <p>Cookie orders need a human in the loop: she reviews each one, adjusts the price, then invoices. QuickBooks was already her accounting tool, and it works out sales tax by address. Classes are fixed-price and first-come, so they need instant payment; Square’s checkout links handle that, with the server holding the spot for 15 minutes and releasing it (and closing the link) if payment doesn’t come through.</p></div>
+      <div class="pick"><h3>An admin built for a phone</h3><p class="what">Instead of: editing a spreadsheet</p>
+        <p>Every setting the site uses (prices, flavors, lead time, weekly limits, blocked dates, drop-off ZIPs, wording, photos, events, codes) is editable in plain language, with a preview before going live. Orders, messages, phone orders, pickup times and payments all happen in one place, with toasts and confirmations sized for a phone.</p></div>
+      <div class="pick"><h3>Cloudflare Pages + GitHub</h3><p class="what">Hosting and release process</p>
+        <p>The live site is on Cloudflare Pages with her own domain; a test copy runs on GitHub Pages against a separate test Sheet, test QuickBooks and Square sandbox. Changes go to test first, pass a written test plan, then get promoted to live by moving one branch.</p></div>
+    </div>
+
+    <h2>Details that matter</h2>
+    <div class="stack">
+      <div class="pick"><h3>Speed</h3><p>Settings are remembered in the browser, so return visits open instantly and refresh quietly in the background. First visits fade in once real settings arrive, so customers never see stale prices.</p></div>
+      <div class="pick"><h3>Reliability</h3><p>Every rule is enforced twice: in the browser for instant feedback, and on the server so nothing can be bypassed. Orders are protected against double-clicks and dropped connections. A background check every 5 minutes marks invoices paid, expires unpaid class holds, and sends pickup reminders the morning before.</p></div>
+      <div class="pick"><h3>Privacy</h3><p>The pickup address only appears in confirmation emails. Customer data stays in her Google account. Payment keys are stored only in the server’s private settings, never in the website.</p></div>
+      <div class="pick"><h3>Testing</h3><p>The server code runs in automated tests with Google’s services stubbed out (over 200 checks covering ordering rules, payments, reminders, emails and phone orders), plus a written end-to-end test plan run on the test site before each release.</p></div>
+      <div class="pick"><h3>Accessible and mobile-first</h3><p>Built for phones first: one-row header, full-width tap targets, no zoom traps. Keyboard focus, labels and screen-reader text throughout.</p></div>
+    </div>
+
+    <h2>What it costs to run</h2>
+    <table class="cost">
+      <tr><td>Website hosting (Cloudflare Pages, GitHub Pages)</td><td>$0</td></tr>
+      <tr><td>Database, server and email (Google Sheet, Apps Script, Gmail)</td><td>$0</td></tr>
+      <tr><td>Domain name</td><td>about $11 a year</td></tr>
+      <tr><td>QuickBooks Online (she already had it) and Square</td><td>their usual card fees</td></tr>
+    </table>
+
+    <h2>About this demo</h2>
+    <p>This is the real site and the real admin code, running against a pretend server inside your browser with sample data. Orders you place on the <a href="index.html">customer site</a> show up in the <a href="admin.html">owner admin</a>, and nothing is sent anywhere. Use <strong>Reset demo data</strong> in the top bar to start over.</p>
+    <p class="muted">Built by Leigha Grimm for Sweet Nothings by M · <a href="https://www.sweetnothingsbym.com">sweetnothingsbym.com</a> (the live site)</p>
+    <p style="margin-top:28px"><a class="btn ghost" href="how-it-works.html">← How it works</a></p>
+  </section>
+</main>
+<script src="demo/demo-db.js"></script>
+<script src="demo/demo-server.js"></script>
+<script src="config.js"></script>
+<script src="demo/demo-after.js"></script>
+</body>
+</html>
