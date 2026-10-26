@@ -4,6 +4,17 @@
  * the demo site shows up in the demo admin. Nothing leaves the browser. "Reset demo data" puts the samples back.
  */
 (function () {
+  // GitHub Pages serves this demo from the same address as the real test site (leighagrimm-web.github.io), so they
+  // share browser storage. The site's own keys (sn_bag, sn_orders, sn_live_cfg_v2…) get a demo prefix here, so
+  // the demo never touches the test site's saved bag or settings, and the other way around.
+  ['getItem', 'setItem', 'removeItem'].forEach((fn) => {
+    const orig = Storage.prototype[fn];
+    Storage.prototype[fn] = function (k, ...rest) {
+      const key = String(k);
+      return orig.call(this, /^sn_/.test(key) && !/^sn_demo/.test(key) ? 'sn_demo__' + key : key, ...rest);
+    };
+  });
+
   const KEY = 'sn_demo_db_v1';
   const iso = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return SN.isoDate(d); };
   const ago = (hours) => new Date(Date.now() - hours * 3600e3).toISOString();
