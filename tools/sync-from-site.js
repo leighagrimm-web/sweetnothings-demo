@@ -49,4 +49,13 @@ ASSETS.forEach((f) => {
   put(f, data);
 });
 
-console.log('Synced ' + changed + ' files from ' + SITE);
+// Every page asks for the demo scripts with a fresh ?v=, so browsers never run an old cached copy.
+const stamp = Date.now().toString(36);
+fs.readdirSync(OUT).filter((f) => f.endsWith('.html')).forEach((f) => {
+  const file = path.join(OUT, f);
+  const s = fs.readFileSync(file, 'utf8');
+  const t = s.replace(/src="demo\/(demo-[a-z]+\.js)(\?v=[\w]+)?"/g, 'src="demo/$1?v=' + stamp + '"');
+  if (t !== s) fs.writeFileSync(file, t);
+});
+
+console.log('Synced ' + changed + ' files from ' + SITE + ' (demo scripts ?v=' + stamp + ')');
