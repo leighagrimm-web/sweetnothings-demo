@@ -12,7 +12,9 @@
   const money = SN.money;
 
   let cfg = null;          // settings being edited
-  let stamp = '';          // fingerprint of the Sheet's settings when loaded (to notice edits made in the Sheet)
+  let stamp = '';          // fingerprint of the Sheet's settings when loaded (to notice when someone else saves)
+  let base = null;         // the settings as last loaded or saved (cleaned), so Save sends only what changed here
+  const NEEDS_CODE = '2026-10-31d';   // the Code.gs (CODE_VERSION) this page needs
   let orders = [];
   let messages = [];
   let codes = [];
@@ -20,7 +22,8 @@
   let sheetUrl = '';
   let dirty = false;
   let busy = false;
-  let showAllOrders = false;
+  let ordersView = 'active';  // which tab inside Orders: 'active' or 'past' (completed, cancelled, declined, expired)
+  let orderSearch = '';
   let toastTimer = null;
 
   // google.script.run as a promise.
@@ -41,10 +44,14 @@
     const isProd = String(cfg.environment || '').toUpperCase() === 'PROD';
     app.innerHTML =
       (isProd ? '' : '<div class="proto-banner">Demo admin: try reviewing and approving an order, replying to a message, adding a phone order or changing a setting, then look at the customer site.</div>') +
+      // The Sheet's Apps Script is older than this page needs: say so, or saving can go wrong in confusing ways.
+      (false ? '<div class="proto-banner code-old" role="alert">The Sheet’s Apps Script is out of date for this admin. ' +
+        'Paste the newest Code.gs into the Sheet’s Apps Script, then Deploy → Manage deployments → Edit → New version → Deploy, and reload this page.</div>' : '') +
       '<header class="admin-header"><div class="wrap">' +
         '<span class="brand"><img src="' + esc(siteUrl) + 'logo.png" alt=""><span>Sweet Nothings · Admin</span></span>' +
         '<div class="row-gap" style="gap:8px">' +
           (sheetUrl ? '<a class="btn ghost small" href="' + esc(sheetUrl) + '" target="_blank" rel="noopener">Open the Sheet</a>' : '') +
+          '<button type="button" class="btn ghost small" id="refresh-site" title="After editing the Sheet directly, show those changes on the website right away">Refresh website</button>' +
           '<a class="btn ghost small" href="' + esc(siteUrl) + 'index.html" target="_blank" rel="noopener">View site</a>' +
         '</div>' +
       '</div></header>' +
@@ -53,40 +60,69 @@
           TAB_GROUPS.map(([group, tabs]) => '<span class="admin-nav-group">' + group + '</span>' +
             tabs.map(([id, label]) => '<a href="#' + id + '" target="_self" data-tab="' + id + '">' + label + '<span class="nav-count" id="nav-count-' + id + '" hidden></span></a>').join('')).join('') +
         '</nav>' +
-        '<main class="admin-main">' +
+        '<main class="admin-main"><div id="health-banner"></div>' +
           '<div class="admin-title" id="settings-title"><div><h1>Shop settings</h1>' +
             '<p>Use <strong>Preview changes</strong> to see the site with your edits before anything goes live. Customers only see changes after you save.</p></div>' +
             '<div class="row-gap" style="gap:10px"><button type="button" class="btn ghost" data-preview>Preview changes</button><button type="button" class="btn" data-save>Save changes</button></div>' +
           '</div>' +
           sectionDashboard() + sectionOrders() + sectionMessages() + sectionCodes() + sectionPayments() + sectionCustom() + sectionArtisan() + sectionRules() + sectionZones() + sectionFaq() +
-          sectionPages() + sectionEvents() + sectionGallery() + sectionSettings() +
+          sectionPages() + sectionEvents() + sectionGallery() + sectionSettings() + sectionHelp() + sectionWhatsNew() +
         '</main>' +
       '</div>' +
       '<div class="scrim" id="scrim"></div>' +
       '<aside class="panel review-panel" id="review" role="dialog" aria-modal="true" aria-labelledby="review-title" tabindex="-1"></aside>' +
-      '<div class="save-bar" id="save-bar" role="region" aria-label="Unsaved changes"><div class="wrap"><span>You have unsaved changes.</span>' +
+      '<div class="save-bar" id="save-bar" role="region" aria-label="Unsaved changes"><div class="wrap"><span id="save-bar-text">You have unsaved changes.</span>' +
         '<div class="row-gap"><button type="button" class="btn ghost small" id="discard">Discard</button>' +
         '<button type="button" class="btn ghost small" data-preview>Preview changes</button>' +
         '<button type="button" class="btn small" data-save>Save changes</button></div></div></div>' +
-      '<div class="toast" id="toast" role="status" aria-live="polite"><span id="toast-text"></span></div>';
+      '<div class="toast" id="toast" role="status" aria-live="polite"><span id="toast-text"></span></div>' +
+      // Phones: the menu is a bar at the bottom (where thumbs are) and "More" opens everything else.
+      '<nav class="admin-tabbar" aria-label="Admin sections">' +
+        [['dashboard', 'Dashboard'], ['orders', 'Orders'], ['messages', 'Messages']].map(([id, label]) =>
+          '<a href="#' + id + '" target="_self" data-tabbar="' + id + '">' + TABBAR_ICONS[id] + '<span>' + label + '</span><b class="tabbar-count" id="tabbar-count-' + id + '" hidden></b></a>').join('') +
+        '<button type="button" data-tabbar="more" aria-expanded="false" aria-controls="more-sheet">' + TABBAR_ICONS.more + '<span>More</span><b class="tabbar-count" id="tabbar-count-more" hidden></b></button>' +
+      '</nav>' +
+      '<div class="more-sheet" id="more-sheet" role="dialog" aria-modal="true" aria-label="More" hidden>' +
+        '<div class="more-head"><strong>Menu</strong><button type="button" class="icon-del" data-more-close aria-label="Close">' + SN_ICONS.close + '</button></div>' +
+        TAB_GROUPS.map(([group, tabs]) => '<p class="admin-nav-group">' + group + '</p>' +
+          tabs.filter(([id]) => ['dashboard', 'orders', 'messages'].indexOf(id) === -1)
+            .map(([id, label]) => '<a href="#' + id + '" target="_self" data-more-link="' + id + '">' + label + '<span class="nav-count" id="more-count-' + id + '" hidden></span></a>').join('')).join('') +
+        '<p class="admin-nav-group">Website</p>' +
+        '<button type="button" class="more-item" data-more-refresh>Refresh website</button>' +
+        (sheetUrl ? '<a href="' + esc(sheetUrl) + '" target="_blank" rel="noopener">Open the Sheet</a>' : '') +
+        '<a href="' + esc(siteUrl) + 'index.html" target="_blank" rel="noopener">View site</a>' +
+      '</div>';
     wire();
+    if (releaseSeen() < RELEASES[0].id) navCount('whatsnew', 'New');
   }
+
+  const TABBAR_ICONS = {"dashboard":"<svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"17\" rx=\"2\"/><path d=\"M3 9h18M8 2v4M16 2v4\"/></svg>","orders":"<svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M6 3h12v18l-3-2-3 2-3-2-3 2z\"/><path d=\"M9 8h6M9 12h6\"/></svg>","messages":"<svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4 5h16v11H8l-4 4z\"/></svg>","more":"<svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M4 7h16M4 12h16M4 17h16\"/></svg>"};
 
   // Each tab shows one section. Orders and Messages are day-to-day; the rest are shop settings (saved together).
   const TAB_GROUPS = [
     ['Orders &amp; messages', [['dashboard', 'Dashboard'], ['orders', 'Orders'], ['messages', 'Messages'], ['codes', 'Promo &amp; gift codes'], ['payments', 'Payments']]],
     ['Shop settings', [['custom', 'Custom pricing'], ['artisan', 'Artisan &amp; flavors'], ['rules', 'Ordering rules'], ['zones', 'Drop-off zones'],
-      ['faq', 'FAQ'], ['pages', 'Website pages'], ['events', 'Events'], ['gallery', 'Gallery'], ['settings', 'Contact &amp; pickup']]]
+      ['faq', 'FAQ'], ['pages', 'Website pages'], ['events', 'Events'], ['gallery', 'Gallery'], ['settings', 'Contact &amp; pickup']]],
+    ['Help', [['help', 'How things work'], ['whatsnew', 'What’s new']]]
   ];
   const TAB_IDS = TAB_GROUPS.reduce((a, g) => a.concat(g[1].map((t) => t[0])), []);
 
   function showTab() {
+    if (location.hash === '#past') { ordersView = 'past'; history.replaceState(null, '', '#orders'); renderOrders(); }
     const id = TAB_IDS.indexOf(location.hash.slice(1)) !== -1 ? location.hash.slice(1) : 'dashboard';
     $$('.admin-main > .panel-card').forEach((s) => { s.hidden = s.id !== id; });
-    $('#settings-title').hidden = ['dashboard', 'orders', 'messages', 'codes', 'payments'].indexOf(id) !== -1;
+    $('#settings-title').hidden = ['dashboard', 'orders', 'messages', 'codes', 'payments', 'help', 'whatsnew'].indexOf(id) !== -1;
+    if (id === 'whatsnew') markReleasesSeen();
     if (id === 'payments' && !payInfo) loadPayments();
     $$('.admin-nav a').forEach((a) => { if (a.dataset.tab === id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+    $$('[data-tabbar]').forEach((a) => {
+      const on = a.dataset.tabbar === id || (a.dataset.tabbar === 'more' && ['dashboard', 'orders', 'messages'].indexOf(id) === -1);
+      if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    });
+    $$('[data-more-link]').forEach((a) => { if (a.dataset.moreLink === id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+    if ($('#more-sheet') && !$('#more-sheet').hidden) openMore(false);
     window.scrollTo(0, 0);
+    growAll();
   }
   // Badge on a tab, e.g. "2 to review".
   function navCount(id, text) {
@@ -94,22 +130,450 @@
     if (!el) return;
     el.textContent = text || '';
     el.hidden = !text;
+    const more = $('#more-count-' + id);
+    if (more) { more.textContent = text || ''; more.hidden = !text; }
+    const bar = $('#tabbar-count-' + id);
+    if (bar) { bar.textContent = (String(text || '').match(/^\d+/) || [text || ''])[0]; bar.hidden = !text; }
+    const anyMore = $$('[id^="more-count-"]').some((x) => !x.hidden);
+    const dot = $('#tabbar-count-more');
+    if (dot) { dot.hidden = !anyMore; dot.textContent = ''; }
+  }
+  function openMore(open) {
+    const sh = $('#more-sheet');
+    sh.hidden = !open;
+    $('[data-tabbar="more"]').setAttribute('aria-expanded', String(open));
+    document.body.classList.toggle('more-open', open);
+    if (open) $('[data-more-close]').focus();
   }
 
   const field = (id, label, input, hint) => '<div class="field"><label class="label" for="' + id + '">' + label + '</label>' + input + (hint ? '<p class="hint">' + hint + '</p>' : '') + '</div>';
   const numInput = (path, attrs, before, after, type) => '<div class="input-wrap">' + (before ? '<span>' + before + '</span>' : '') +
     '<input id="' + path + '" type="number" ' + attrs + ' data-path="' + path + '" data-type="' + (type || 'num') + '">' + (after ? '<span>' + after + '</span>' : '') + '</div>';
   const card = (id, title, sub, body) => '<section class="panel-card" id="' + id + '" aria-labelledby="' + id + '-h"><h2 id="' + id + '-h">' + title + '</h2>' + (sub ? '<p class="sub">' + sub + '</p>' : '') + body + '</section>';
+  /* ---------- How things work: the help guide ---------- */
+  // Each answer is a list: a string is a paragraph, an array is a bullet list; **word** is bold. "go" links to that page.
+  // Keep it in step with the admin when things change (the AI help chat will answer from this too).
+  const HELP = [
+    {
+      "id": "daily",
+      "title": "Your day-to-day",
+      "items": [
+        {
+          "q": "Where should I start each day?",
+          "go": "dashboard",
+          "a": [
+            "Open the **Dashboard**. It shows the week by the date orders are needed:",
+            [
+              "How many orders and cookies are confirmed, next to your weekly limits.",
+              "Each day’s orders, with one card per class (tap a class to see who’s booked).",
+              "The **bake list**: custom orders one by one, artisan cookies added up by size and flavor.",
+              "**Data checks**: anything that looks off, like an order past its date that’s still open."
+            ],
+            "A yellow note at the top means orders are waiting for your review. A red box at the top of any page means something on the website needs fixing (see “When something goes wrong”)."
+          ]
+        },
+        {
+          "q": "Using the admin on your phone",
+          "a": [
+            "The bar at the bottom has **Dashboard**, **Orders** and **Messages**, with their counts. **More** opens every other page, plus Refresh website, Open the Sheet and View site.",
+            "While you have unsaved changes, **Discard** and **Save changes** take the bar’s place until you save or discard."
+          ]
+        },
+        {
+          "q": "Finding an order",
+          "go": "orders",
+          "a": [
+            "In Orders, type in the search box: a name, an email, part of a phone number, an order number (with or without “SN-”), an occasion, a class or a ZIP code.",
+            "**Active** has everything still in progress. **Past** has completed, cancelled, declined and expired orders. If what you searched for is on the other tab, there’s a link to it."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cookies",
+      "title": "Cookie orders, start to finish",
+      "items": [
+        {
+          "q": "The steps an order goes through",
+          "go": "orders",
+          "a": [
+            [
+              "**Pending review**: the customer sent a request and got a “request received” email. Nothing is confirmed or charged yet.",
+              "**Invoice sent**: you approved it. They got a confirmation email with a Pay button for the QuickBooks invoice.",
+              "**Paid**: set on its own within about 5 minutes of them paying.",
+              "**Baking** and **Ready**: optional, for your own tracking. Changing to these doesn’t email anyone.",
+              "**Completed**: set on its own the night after the order’s date, once it’s paid."
+            ],
+            "Orders that never get paid stay open, so you notice them."
+          ]
+        },
+        {
+          "q": "Reviewing and approving a request",
+          "go": "orders",
+          "a": [
+            "Tap **Review** on the order to see everything they asked for, including allergies and how full that week is. You can approve it as it is, or adjust the items and prices first and add a note the customer will see.",
+            "Then tap **Approve & email confirmation**. The customer gets the final price and a Pay button, and the invoice is made in QuickBooks. Prices on the site are before tax; QuickBooks adds the sales tax."
+          ]
+        },
+        {
+          "q": "Declining a request",
+          "go": "orders",
+          "a": [
+            "In the Review panel, tap **Can’t take this order? Decline it**. Add a short note if you like. The customer gets a kind email saying you can’t take it; nothing was charged."
+          ]
+        },
+        {
+          "q": "Changing the date, or messaging the customer",
+          "go": "orders",
+          "a": [
+            "In the Review panel, **Change date** moves the order to another day. **Message the customer** emails them from the shop; their reply comes to your inbox, and the message is saved with the order."
+          ]
+        },
+        {
+          "q": "Setting the pickup or drop-off time",
+          "go": "orders",
+          "a": [
+            "Once you’ve agreed on a time with the customer, open the order and tap **Set pickup time** (or drop-off time). They get an email with the time, the address and your cell number, and a reminder the morning before. Your cell number is in Contact & pickup."
+          ]
+        },
+        {
+          "q": "Payments and reminders",
+          "go": "payments",
+          "a": [
+            "Cookie orders are paid a week before their date. Every 5 minutes the site checks QuickBooks and marks paid orders **Paid**.",
+            "If an approved order is still unpaid 7 days before its date, the customer gets one friendly reminder with the Pay button (only one). The order turns light red in Orders with “Unpaid · X days to go”. After that, follow up yourself if you need to."
+          ]
+        },
+        {
+          "q": "Adding an order taken by phone",
+          "go": "orders",
+          "a": [
+            "Orders → **+ Add phone order**. Fill in the customer and what they want. Any date works, even blocked or full weeks, and you can set the price per cookie, add a rush fee and a note.",
+            "**Create & approve** emails the confirmation and invoice in one step; the customer never gets a “request received” email. **Save without approving** keeps it as Pending review."
+          ]
+        },
+        {
+          "q": "Cancelling an order",
+          "go": "orders",
+          "a": [
+            "Change its status to **Cancelled**. Before anything happens, the site tells you exactly what will:",
+            [
+              "Its cookies stop counting toward that week (or a class booking’s spots open up again).",
+              "An unpaid QuickBooks invoice is voided so it can’t be paid.",
+              "Any gift card amount goes back on the card."
+            ],
+            "If they already paid, refund it yourself in QuickBooks (cookies) or Square (classes); the website can’t do that part. Let the customer know with Message the customer. A cancelled cookie order can’t be reopened, so they’d need to order again."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "classes",
+      "title": "Classes and events",
+      "items": [
+        {
+          "q": "How class bookings work",
+          "go": "events",
+          "a": [
+            "Customers book and pay at checkout through Square. While they pay, the booking is **Awaiting payment** and their spot is held for the time set in Events → “Hold a class spot while they pay”.",
+            [
+              "Paid in time: it becomes **Paid**, and they get a “You’re booked!” email with the class details, the location, the flyer and Add to calendar buttons.",
+              "Not paid in time: it becomes **Expired**, the spot opens up again, and they get a friendly email with a link to book again."
+            ],
+            "You get an email for each new booking."
+          ]
+        },
+        {
+          "q": "Seeing who’s coming",
+          "go": "dashboard",
+          "a": [
+            "On the Dashboard, each class is one card on its day with the time and how many spots are booked out of the max. Tap it to see everyone, with their spots and whether they’ve paid. Each event on the Events page also shows booked and spots left."
+          ]
+        },
+        {
+          "q": "Adding or changing an event",
+          "go": "events",
+          "a": [
+            "On the Events page: title, date, times, location name and address (customers tap it for directions), price, max attendees, a photo, an optional flyer, and the button customers see: **Add to bag** (book and pay), **Order now**, **Message me** or **None**. Hide an event with its Showing switch, then Save changes."
+          ]
+        },
+        {
+          "q": "Booking someone yourself, or cancelling a booking",
+          "go": "orders",
+          "a": [
+            "Use **+ Add phone order** and pick the class. To cancel a booking, set it to **Cancelled** and its spots open up again. If they paid, refund them in Square."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rules",
+      "title": "The ordering rules",
+      "items": [
+        {
+          "q": "What the website checks before a customer can order",
+          "go": "rules",
+          "a": [
+            [
+              "**Minimum notice**: how many days ahead they must order (Ordering rules).",
+              "**Blocked dates**: days you’re closed (Ordering rules). Past ones clear themselves.",
+              "**Weekly limits**: custom and artisan cookies per week, Monday to Sunday (Ordering rules). Only approved orders count. Once a week is full, customers can’t pick days in it.",
+              "**Minimum order** and **most designs** for custom cookies (Custom pricing).",
+              "**Flavors**: how many per dozen, and more for bigger orders (Artisan & flavors).",
+              "**Drop-off**: only to ZIP codes in Drop-off zones, each with its own fee. Outside them, customers are offered a meet-up spot inside your area."
+            ],
+            "Phone orders you add yourself skip all of these."
+          ]
+        },
+        {
+          "q": "Taking a break from orders",
+          "go": "rules",
+          "a": [
+            "Ordering rules → **Accepting cookie orders**: switch it off and customers can’t send cookie requests (class bookings still work). For a few days off, block the dates instead. To close the whole website, use maintenance mode on Website pages."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "site",
+      "title": "Changing the website",
+      "items": [
+        {
+          "q": "Editing, previewing and saving",
+          "a": [
+            "Change anything in the Shop settings pages, then tap **Preview changes** to see the website with your edits (only you see it), and **Save changes** to make them live. **Discard** puts everything back.",
+            "Edited the Google Sheet directly? Tap **Refresh website** afterwards (on your phone: More → Refresh website) so the site shows it right away."
+          ]
+        },
+        {
+          "q": "Adding photos",
+          "go": "gallery",
+          "a": [
+            "Photos come from Google Drive. In Drive, open the photo’s Share menu, set General access to **Anyone with the link**, copy the link, and paste it into the photo box. A small preview appears next to it.",
+            "In the Gallery, the “What it shows” box is what Google and screen readers read, like “Baby shower”. A few words is plenty."
+          ]
+        },
+        {
+          "q": "Showing or hiding pages, and maintenance mode",
+          "go": "pages",
+          "a": [
+            "On Website pages, switch About, Special Events, Gallery or FAQ off to hide them. **Maintenance mode** closes the whole site with a message; set a password so you can still get in to check it."
+          ]
+        },
+        {
+          "q": "Two people editing at once",
+          "a": [
+            "Save only saves what you changed, so you and a helper can edit different things. If someone else saves while you’re editing, the save bar turns red and says what they changed. If you both changed the same thing, Save asks which to keep."
+          ]
+        },
+        {
+          "q": "Promo and gift codes",
+          "go": "codes",
+          "a": [
+            "**Percent off** codes come off before tax. A **gift card** is a dollar amount that keeps its balance until it’s used up. Codes save right away, with no Save button needed."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "emails",
+      "title": "Emails the website sends",
+      "items": [
+        {
+          "q": "What customers get",
+          "a": [
+            [
+              "Request received (cookie orders from the website).",
+              "Order confirmed, with the Pay button (when you approve).",
+              "Sorry, we can’t take it (when you decline).",
+              "Pickup or drop-off time, and a reminder the morning before.",
+              "A payment reminder, once, a week before the date if still unpaid.",
+              "You’re booked! (classes), or a note if their booking expired unpaid.",
+              "We got your message (Contact page and Message me; once an hour at most).",
+              "Your messages from an order, and your replies to messages."
+            ],
+            "When customers reply to any of these, it comes to your inbox."
+          ]
+        },
+        {
+          "q": "What you get",
+          "go": "settings",
+          "a": [
+            [
+              "New order to review.",
+              "New class booking.",
+              "New message.",
+              "Website problem alerts from the morning check, and an “All clear” once fixed."
+            ],
+            "They go to the email in Contact & pickup → “New-order alerts go to”. Problem alerts also go to anyone in “Also send website problem alerts to”."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "problems",
+      "title": "When something goes wrong",
+      "items": [
+        {
+          "q": "A red box at the top, or an “Action needed” email",
+          "go": "payments",
+          "a": [
+            "Every morning at 7 the site checks QuickBooks, Square, the payment checks and emails. If something needs fixing, you get an email saying what and how, and a red box shows at the top of the admin. Follow the steps, then tap **Check again**. You’ll get an “All clear” email once it’s fixed."
+          ]
+        },
+        {
+          "q": "A customer says they didn’t get an email",
+          "a": [
+            "Ask them to check their spam folder first. In the Google Sheet, the order’s email columns say Sent (with the time) or FAILED. You can always send them a note from the order with Message the customer."
+          ]
+        },
+        {
+          "q": "QuickBooks or Square isn’t connected",
+          "go": "payments",
+          "a": [
+            "On the Payments page, QuickBooks shows **Connect QuickBooks** when it needs signing in again (Intuit asks every 5 years), and Square shows an error if its key stopped working. **Check now** runs the payment check right away."
+          ]
+        },
+        {
+          "q": "A red bar says the Apps Script is out of date",
+          "a": [
+            "The website was updated but the Sheet’s code wasn’t yet. Nothing is lost; let Leigha know."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "test",
+      "title": "Test site and live site",
+      "items": [
+        {
+          "q": "Which one am I in?",
+          "a": [
+            "The test admin has a dark strip at the top saying “Test admin: connected to the test Sheet”, its emails have [TEST] in the subject, and its payments use test money. The live admin has no strip. Only share www.sweetnothingsbym.com with customers."
+          ]
+        }
+      ]
+    }
+  ];
+  const helpText = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  function sectionHelp() {
+    const tabName = (id) => { const t = TAB_GROUPS.reduce((a, g) => a.concat(g[1]), []).find((x) => x[0] === id); return t ? t[1] : ''; };
+    return card('help', 'How things work', 'Plain answers about running the shop from here. Tap a question to open it.',
+      '<div class="help-search"><label class="sr-only" for="help-search">Search the guide</label>' +
+        '<input class="input" id="help-search" type="search" autocomplete="off" placeholder="Search, e.g. refund, photo, pickup time"></div>' +
+      '<p class="hint" id="help-none" hidden>Nothing matches that. Try another word, or ask Leigha.</p>' +
+      HELP.map((sec) => '<div class="help-sec" data-help-sec><h3 class="rv-h">' + esc(sec.title) + '</h3>' +
+        sec.items.map((it) => '<details class="help-item" data-help-item><summary>' + esc(it.q) + '</summary><div class="help-a">' +
+          it.a.map((p) => Array.isArray(p) ? '<ul>' + p.map((li) => '<li>' + helpText(li) + '</li>').join('') + '</ul>' : '<p>' + helpText(p) + '</p>').join('') +
+          (it.go ? '<a class="link-btn" href="#' + it.go + '" target="_self">Go to ' + tabName(it.go) + ' →</a>' : '') +
+        '</div></details>').join('') + '</div>').join(''));
+  }
+  // Search: show the questions whose wording matches every word typed, opened; hide the rest.
+  function filterHelp(q) {
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    let any = false;
+    $$('[data-help-sec]').forEach((sec) => {
+      let shown = 0;
+      $$('[data-help-item]', sec).forEach((d) => {
+        const hit = words.every((w) => d.textContent.toLowerCase().indexOf(w) !== -1);
+        d.hidden = !hit;
+        d.open = !!words.length && hit;
+        if (hit) shown++;
+      });
+      sec.hidden = !shown;
+      any = any || shown > 0;
+    });
+    $('#help-none').hidden = any;
+  }
+
+  /* ---------- What's new: release notes for Melissa ---------- */
+  // Newest first. Add an entry with each update (id = the date it went live, plus a letter for a second one that day);
+  // "go" links to the admin tab it's about.
+  const RELEASES = [
+    { id: '2026-11-01', title: 'A help guide', items: [
+      { t: 'How things work', d: 'Help → How things work answers everyday questions in plain words: approving and declining, phone orders, payments and reminders, classes, the ordering rules, changing the website, the emails customers get, and what to do when something goes wrong. Search it, then tap “Go to …” to jump to the right page.', go: 'help' }
+    ] },
+    { id: '2026-10-31d', title: 'Easier on your phone', items: [
+      { t: 'Menu at the bottom', d: 'On your phone, Dashboard, Orders and Messages are in a bar at the bottom of the screen, with their counts. More opens everything else, plus Refresh website, Open the Sheet and View site. While you have unsaved changes, Discard and Save take its place until you save.' },
+      { t: 'Orders as cards', d: 'Each order is a card you can read without scrolling sideways: who, when, what, the total, and a big Review button. “How orders work” opens the explanation when you want it.', go: 'orders' },
+      { t: 'Text boxes fit their text', d: 'Boxes with longer text (headings, the pricing and allergy notes, event details, FAQ questions) wrap and grow to show everything, so there’s no scrolling inside a small box. Discard is instant now too.' }
+    ] },
+    { id: '2026-10-31c', title: 'Past orders tidy themselves up', items: [
+      { t: 'Active and Past orders', d: 'Orders now has two tabs at the top: Active (everything still in progress) and Past (completed, cancelled, declined and expired, newest date first).', go: 'orders' },
+      { t: 'Search orders', d: 'Type a name, email, phone number or order number in the search box to find an order fast. If it’s on the other tab, there’s a link to it.', go: 'orders' },
+      { t: 'Completed on their own', d: 'The night after an order’s date, paid cookie orders and booked classes move to Completed by themselves (a booking with more than one class waits for the last one). No email goes to the customer. Unpaid orders stay open so you still see them.', go: 'orders' }
+    ] },
+    { id: '2026-10-31b', title: 'Helping Google find you', items: [
+      { t: 'Better search listings', d: 'Your pages now tell Google you’re a bakery in Rosemont, IL that delivers to the towns in your drop-off zones, with clearer titles and descriptions. Google takes a few days to a few weeks to notice. Links you text or post now show a proper preview too.' },
+      { t: 'Photo descriptions', d: 'The box next to each gallery photo (“What it shows”) is what Google and screen readers read, e.g. “Baby shower” becomes “Baby shower custom cookies by Sweet Nothings by M”. A few words is plenty.', go: 'gallery' }
+    ] },
+    { id: '2026-10-31', title: 'A morning check-up for your website', items: [
+      { t: 'Daily health check', d: 'Every morning at 7 the site checks that QuickBooks, Square, payment checks and emails are all working. If something needs fixing, you get an email saying what and how, and a red box shows at the top of your admin until it’s fixed, then an “all clear” email. Nothing’s wrong? You won’t hear from it.', go: 'payments' },
+      { t: 'Run it yourself', d: 'Payments → “Run health check now” checks everything right away.', go: 'payments' }
+    ] },
+    { id: '2026-10-27b', title: 'Classes on the dashboard, message emails, safer saving', items: [
+      { t: 'One card per class on your dashboard', d: 'A class now shows as one card on its day, with the time and how many spots are booked out of the max. Click it to see everyone booked, with their spots and whether they’ve paid.', go: 'dashboard' },
+      { t: '“We got your message” email', d: 'When someone sends a message from the Contact page or “Message me”, they get a short email saying you got it and will reply within 1–2 days, with a copy of what they sent. Replies come to you.', go: 'messages' },
+      { t: 'Two people editing at once', d: 'Saving now only saves what you changed, so you and a helper can edit different things without undoing each other. If someone else saves while you’re editing, the save bar tells you, and if you both changed the same thing you choose which to keep. An admin page with no unsaved edits picks up others’ changes on its own.' }
+    ] },
+    { id: '2026-10-27', title: 'Payment reminders and small fixes', items: [
+      { t: 'This “What’s new” page', d: 'Every update to your site and admin gets a short note here. The tab shows “New” until you’ve read the latest one.' },
+      { t: 'Payment reminders, a week before', d: 'Orders are paid a week before their date. If an approved order still isn’t paid with 7 days to go, the customer automatically gets one friendly reminder email with the Pay button, and the order turns light red in your Orders list with “Unpaid · X days to go”.', go: 'orders' },
+      { t: '“Refresh website” button', d: 'Top of the admin, next to Open the Sheet. If you ever edit the Google Sheet directly, click it and the website shows those changes right away instead of within 10 minutes.' },
+      { t: 'Email typo fix works on the first tap', d: 'When a customer’s email looks mistyped, tapping “Use it” now fixes it in one tap.' }
+    ] },
+    { id: '2026-10-25', title: 'Launch week: phone orders and class emails', items: [
+      { t: 'Add phone orders yourself', d: 'Orders → “+ Add phone order” for orders you agree on by phone (great for rush orders). Any date works, you can set the price per cookie, add a rush fee and a note. “Create & approve” emails the confirmation and invoice in one step; the customer never gets a “request received” email.', go: 'orders' },
+      { t: 'Class confirmations have everything', d: 'The “You’re booked!” email now has the class details, the location with a directions link, the flyer, and Add to Google / Apple / Outlook calendar buttons.', go: 'events' },
+      { t: 'Smoother on your phone', d: 'Review closes after you approve, so you see the “Approved!” message. Messages now pop up over open panels. The phone order form gives you the whole screen.' },
+      { t: 'Checkout tidy-ups for customers', d: 'Event time and pickup window are 15-minute dropdowns. Outside your drop-off area, customers are offered a meet-up spot inside it. Email typos like “gmial.com” or “.cm” get an “Are you sure?” with a one-tap fix.' }
+    ] },
+    { id: '2026-10-24', title: 'Pickup times, reminders and Special Events', items: [
+      { t: 'Set the pickup or drop-off time', d: 'Open an order → “Set pickup time” once you’ve agreed it with the customer. They get an email with the time, the address and your cell, and a reminder the morning before. Add your cell in Contact & pickup.', go: 'orders' },
+      { t: 'Customers give their best pickup window', d: 'Checkout asks for the time of their event (optional) and their best pickup or drop-off window, with a note explaining you’ll confirm a time.' },
+      { t: 'Special Events: short cards + “See details”', d: 'Cards stay short; the full description, a tappable address and an optional flyer open in a details panel. New boxes: Location name, Short line on the card, Flyer.', go: 'events' },
+      { t: 'Unpaid class bookings', d: 'If someone doesn’t finish paying for a class, their spot is released and they get a friendly email with a link to book again.' }
+    ] },
+    { id: '2026-10-23', title: 'Home page and emails', items: [
+      { t: 'Edit “What I make” and the slideshow', d: 'Website pages → Home page: the intro line, the short list next to Custom Cookies, and the slideshow photos.', go: 'pages' },
+      { t: 'Reply in Gmail', d: 'On a message, “Open in Gmail instead” opens a ready-made reply in a new tab.', go: 'messages' }
+    ] }
+  ];
+  const SEEN_KEY = 'sn_admin_release_seen';
+  const releaseSeen = () => { try { return localStorage.getItem(SEEN_KEY) || ''; } catch (e) { return ''; } };
+  function markReleasesSeen() {
+    try { localStorage.setItem(SEEN_KEY, RELEASES[0].id); } catch (e) { /* the badge just stays */ }
+    navCount('whatsnew', '');
+  }
+  function sectionWhatsNew() {
+    const tabName = (id) => { const t = TAB_GROUPS.reduce((a, g) => a.concat(g[1]), []).find((x) => x[0] === id); return t ? t[1] : ''; };
+    return card('whatsnew', 'What’s new', 'Updates to your site and admin, newest first.',
+      '<div class="stack" style="gap:26px">' + RELEASES.map((r) =>
+        '<div><p class="eyebrow" style="margin:0 0 4px">' + esc(SN.prettyDate(r.id.slice(0, 10))) + '</p><h3 style="font-size:24px;margin:0 0 10px">' + esc(r.title) + '</h3>' +
+          '<div class="stack" style="gap:10px">' + r.items.map((it) =>
+            '<div style="background:var(--ground);border-radius:12px;padding:12px 14px"><strong>' + esc(it.t) + '</strong>' +
+              '<p style="margin:4px 0 0;color:var(--muted);font-size:15px">' + esc(it.d) + '</p>' +
+              (it.go ? '<a class="link-btn" href="#' + it.go + '" target="_self" style="display:inline-block;margin-top:4px">Go to ' + tabName(it.go) + ' →</a>' : '') + '</div>').join('') +
+          '</div></div>').join('') + '</div>');
+  }
+
   const PHOTO_HINT = 'Paste a Google Drive share link (in Drive: Share → General access → Anyone with the link → Copy link) or an image link. [Text in brackets] shows a placeholder box; blank shows no photo.';
 
   function sectionOrders() {
     return '<section class="panel-card" id="orders" aria-labelledby="orders-h">' +
       '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:flex-start">' +
-        '<div><h2 id="orders-h">Orders</h2><p class="sub">Cookie requests come in as <strong>Pending review</strong>. Click <strong>Review</strong> to approve as-is or with changes, decline, message the customer, or change the date. Class bookings pay in Square at checkout: <strong>Awaiting payment</strong> while they pay, then <strong>Paid</strong> (or <strong>Expired</strong> if they don’t).</p></div>' +
-        '<div class="row-gap" style="gap:8px"><button type="button" class="btn small" data-po="new">+ Add phone order</button><button type="button" class="btn ghost small" id="orders-toggle"></button></div>' +
+        '<div><h2 id="orders-h">Orders</h2><p class="sub" id="orders-sub"></p>' +
+          '<button type="button" class="link-btn orders-how" data-orders-how aria-expanded="false">How orders work</button></div>' +
+        '<div class="row-gap" style="gap:8px"><button type="button" class="btn small" data-po="new">+ Add phone order</button></div>' +
       '</div>' +
+      '<div class="order-tabs" role="tablist" aria-label="Which orders">' +
+        '<button type="button" role="tab" data-orders-view="active"></button><button type="button" role="tab" data-orders-view="past"></button></div>' +
+      '<div class="orders-search"><label class="sr-only" for="orders-search">Search orders</label>' +
+        '<input class="input" id="orders-search" type="search" autocomplete="off" placeholder="Search by name, email, phone or order number">' +
+        '<p class="hint" id="orders-search-note" aria-live="polite"></p></div>' +
       '<div class="table-wrap"><table class="orders-table"><thead><tr><th>Order &amp; order date</th><th>Customer</th><th>Date needed</th><th>Items</th><th>Total</th><th>Status</th></tr></thead>' +
-      '<tbody id="orders-body"></tbody></table></div></section>';
+      '<tbody id="orders-body"></tbody></table></div>' +
+      '<div class="order-cards" id="orders-cards"></div></section>';
   }
   function sectionMessages() {
     return card('messages', 'Messages', 'From the Contact page and the "Message me" buttons. Each one also landed in your email inbox, so you can reply from there too.', '<div class="stack" id="msg-list"></div>');
@@ -163,7 +627,7 @@
       '<p class="hint" style="margin-top:8px">New flavors show on both the Mini and Large Artisan menus. Hide a flavor to take it off the menu without deleting it.</p>' +
       '<h3 style="font-size:22px;margin:26px 0 12px">Special banner</h3>' +
       '<div class="fields">' +
-        '<div class="field" style="grid-column:1 / -1"><label class="label" for="specialText">Banner text (leave blank to hide)</label><input class="input" id="specialText" type="text" data-path="specialText"></div>' +
+        '<div class="field" style="grid-column:1 / -1"><label class="label" for="specialText">Banner text (leave blank to hide)</label><textarea class="input one-line" rows="1" id="specialText" data-path="specialText"></textarea></div>' +
         field('specialUntil', 'Show until', '<input class="input" id="specialUntil" type="date" data-path="specialUntil">') +
       '</div>');
   }
@@ -218,7 +682,7 @@
         '<div class="fields" style="margin-top:14px">' +
           field('maintenancePassword', 'Password to get in', '<input class="input" id="maintenancePassword" type="text" autocomplete="off" data-path="maintenancePassword" placeholder="e.g. sprinkles2026">',
             'On the “back soon” page, click <strong>Have a password?</strong> and enter this. That browser then sees the site until you click “Lock this browser”.') +
-          field('maintenanceTitle', 'Heading', '<input class="input" id="maintenanceTitle" type="text" data-path="maintenanceTitle">') +
+          field('maintenanceTitle', 'Heading', '<textarea class="input one-line" rows="1" id="maintenanceTitle" data-path="maintenanceTitle"></textarea>') +
           '<div class="field" style="grid-column:1 / -1"><label class="label" for="maintenanceMessage">Message</label><textarea class="input" id="maintenanceMessage" rows="2" data-path="maintenanceMessage"></textarea></div>' +
         '</div>' +
       '</div>' +
@@ -232,7 +696,7 @@
           const id = 'pg-' + key;
           if (kind === 'photo') return photoField(id, label, 'data-page="' + key + '"');
           if (kind === 'area' || kind === 'long') return field(id, label, '<textarea class="input" id="' + id + '" rows="' + (kind === 'long' ? 6 : 2) + '" data-page="' + key + '"></textarea>');
-          return field(id, label, '<input class="input" id="' + id + '" type="text" data-page="' + key + '">');
+          return field(id, label, '<textarea class="input one-line" rows="1" id="' + id + '" data-page="' + key + '"></textarea>');
         }).join('') + '</div>' + (group === 'Home page' ? homeItemsEditor() : '')).join(''));
   }
   function homeItemsEditor() {
@@ -266,9 +730,10 @@
       '<div class="fields">' +
         field('ownerEmail', 'New-order alerts go to', '<input class="input" id="ownerEmail" type="email" data-path="ownerEmail" placeholder="Blank = your Google account">') +
         field('replyToEmail', 'Customer replies go to', '<input class="input" id="replyToEmail" type="email" data-path="replyToEmail" placeholder="Blank = same as alerts">') +
+        field('alertEmails', 'Also send website problem alerts to', '<input class="input" id="alertEmails" type="text" data-path="alertEmails" placeholder="e.g. someone@gmail.com (comma-separated)">', 'The morning health check emails you (and these) only when something needs fixing.') +
         field('pickupCity', 'Pickup area', '<input class="input" id="pickupCity" type="text" data-path="pickupCity">', 'Shown on the site') +
         field('pickupAddress', 'Pickup address', '<input class="input" id="pickupAddress" type="text" data-path="pickupAddress">', 'Only in the confirmation email') +
-        field('pickupInstructions', 'Pickup instructions', '<input class="input" id="pickupInstructions" type="text" data-path="pickupInstructions">', 'Only in the confirmation email') +
+        field('pickupInstructions', 'Pickup instructions', '<textarea class="input one-line" rows="1" id="pickupInstructions" data-path="pickupInstructions"></textarea>', 'Only in the confirmation email') +
         field('ownerPhone', 'Your cell', '<input class="input" id="ownerPhone" type="tel" data-path="ownerPhone" placeholder="(847) 555-0100">', 'Only in pickup / drop-off time emails') +
         field('instagram', 'Instagram link', '<input class="input" id="instagram" type="url" data-path="instagram">') +
         field('instagramHandle', 'Instagram handle', '<input class="input" id="instagramHandle" type="text" data-path="instagramHandle">') +
@@ -279,8 +744,14 @@
   }
 
   /* ---------- Helpers ---------- */
-  function markDirty() { dirty = true; $('#save-bar').classList.add('show'); }
-  function clearDirty() { dirty = false; $('#save-bar').classList.remove('show'); }
+  // On phones the save bar takes the bottom bar's place until the changes are saved or discarded (see styles.css).
+  function markDirty() { dirty = true; $('#save-bar').classList.add('show'); document.body.classList.add('has-unsaved'); }
+  function clearDirty() { dirty = false; $('#save-bar').classList.remove('show'); document.body.classList.remove('has-unsaved'); saveWarning(''); }
+  // Shown in the save bar when someone else saved settings while this tab has unsaved edits.
+  function saveWarning(text) {
+    $('#save-bar-text').textContent = text || 'You have unsaved changes.';
+    $('#save-bar').classList.toggle('warn', !!text);
+  }
   // "Are you sure?" in the admin's own style (the browser's confirm() shows a scary technical address on top).
   // ask({ title, points: [...], note, yes, no, danger }) resolves true for yes, false for no / Esc / clicking outside.
   function ask(o) {
@@ -296,6 +767,7 @@
             (o.note ? '<p class="hint">' + esc(o.note) + '</p>' : '') +
           '</div>' +
           '<div class="ask-actions"><button type="button" class="btn ghost" data-ask="no">' + esc(o.no || 'Cancel') + '</button>' +
+            (o.alt ? '<button type="button" class="btn ghost" data-ask="alt">' + esc(o.alt) + '</button>' : '') +
             '<button type="button" class="btn' + (o.danger ? ' danger' : '') + '" data-ask="yes">' + esc(o.yes || 'OK') + '</button></div>' +
         '</div>';
       const back = document.activeElement;
@@ -307,7 +779,7 @@
       };
       const onKey = (e) => {
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); return; }
-        if (e.key === 'Tab') {   // keep focus on the two buttons
+        if (e.key === 'Tab') {   // keep focus on the buttons
           e.preventDefault();
           const bs = $$('[data-ask]', wrap);
           bs[(bs.indexOf(document.activeElement) + 1) % bs.length].focus();
@@ -315,7 +787,7 @@
       };
       wrap.addEventListener('click', (e) => {
         const b = e.target.closest('[data-ask]');
-        if (b) done(b.dataset.ask === 'yes'); else if (e.target === wrap) done(false);
+        if (b) done(b.dataset.ask === 'alt' ? 'alt' : b.dataset.ask === 'yes'); else if (e.target === wrap) done(false);
       });
       document.addEventListener('keydown', onKey, true);
       document.body.appendChild(wrap);
@@ -413,18 +885,43 @@
   const pickable = (o) => (isClass(o) ? (CLASS_STATUSES.indexOf(o.status) === -1 ? [o.status] : []).concat(CLASS_STATUSES) : AFTER_INVOICE.indexOf(o.status) !== -1 ? AFTER_INVOICE : null);
   const badge = (st) => '<span class="status-badge" style="' + (STATUS_STYLE[st] || '') + '">' + esc(st) + '</span>';
   const isActive = (o) => ['Completed', 'Declined', 'Cancelled', 'Expired'].indexOf(o.status) === -1;
+  // Cookie orders are paid a week before their date: approved but unpaid and under 8 days out = needs attention.
+  const daysUntil = (iso) => Math.round((Date.parse(iso + 'T12:00:00Z') - Date.parse(SN.isoDate(new Date()) + 'T12:00:00Z')) / 864e5);
+  const payOverdue = (o) => !isClass(o) && o.status === 'Invoice sent' && !!o.dateNeeded && daysUntil(o.dateNeeded) < 8;
 
   function renderOrders() {
     const pending = orders.filter((o) => o.status === 'Pending review').length;
-    $('#orders-h').innerHTML = 'Orders' + (pending ? ' <span class="count-pill">' + pending + ' to review</span>' : '');
+    const past = ordersView === 'past';
     navCount('orders', pending ? pending + ' to review' : '');
-    const list = showAllOrders ? orders : orders.filter(isActive);
-    $('#orders-toggle').textContent = showAllOrders ? 'Hide completed, declined & cancelled' : 'Show completed, declined & cancelled (' + (orders.length - orders.filter(isActive).length) + ')';
+    $('#orders-h').innerHTML = 'Orders' + (pending ? ' <span class="count-pill">' + pending + ' to review</span>' : '');
+    const nActive = orders.filter(isActive).length;
+    $$('[data-orders-view]').forEach((b) => {
+      const v = b.dataset.ordersView;
+      b.textContent = (v === 'past' ? 'Past' : 'Active') + ' (' + (v === 'past' ? orders.length - nActive : nActive) + ')';
+      b.setAttribute('aria-selected', String(v === ordersView));
+    });
+    $('#orders-sub').innerHTML = past
+      ? 'Completed, cancelled, declined and expired orders, newest date first. Paid orders and class bookings move here on their own the night after their date.'
+      : 'Cookie requests come in as <strong>Pending review</strong>. Click <strong>Review</strong> to approve as-is or with changes, decline, message the customer, or change the date. Class bookings pay in Square at checkout: <strong>Awaiting payment</strong> while they pay, then <strong>Paid</strong> (or <strong>Expired</strong> if they don’t).';
+    const inView = (o) => (past ? !isActive(o) : isActive(o));
+    const found = orders.filter((o) => orderMatches(o, orderSearch));
+    let list = found.filter(inView);
+    if (past) list = list.slice().sort((a, b) => (b.dateNeeded || '').localeCompare(a.dateNeeded || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
+    // Searching: say how many matched, and point to the other tab when the matches are there.
+    const elsewhere = orderSearch ? found.length - list.length : 0;
+    $('#orders-search-note').innerHTML = !orderSearch ? '' :
+      list.length + ' match' + (list.length === 1 ? '' : 'es') + ' here' +
+      (elsewhere ? ' · <button type="button" class="link-btn" data-orders-view="' + (past ? 'active' : 'past') + '" style="padding:0">' + elsewhere + ' in ' + (past ? 'Active' : 'Past') + '</button>' : '') +
+      ' · <button type="button" class="link-btn" data-clear-search style="padding:0">Clear</button>';
     const body = $('#orders-body');
     if (!list.length) {
-      body.innerHTML = '<tr class="empty-row"><td colspan="6">' + (orders.length ? 'No open orders.' : 'No orders yet. They\'ll show up here as soon as a customer sends a request or books a class.') + '</td></tr>';
+      const none = orderSearch ? 'No ' + (past ? 'past' : 'active') + ' orders match “' + esc(orderSearch) + '”.'
+        : past ? 'No past orders yet.' : orders.length ? 'No open orders.' : 'No orders yet. They\'ll show up here as soon as a customer sends a request or books a class.';
+      body.innerHTML = '<tr class="empty-row"><td colspan="6">' + none + '</td></tr>';
+      $('#orders-cards').innerHTML = '<p class="muted" style="text-align:center;padding:20px 0">' + none + '</p>';
       return;
     }
+    const cards = [];
     // Six columns with related details stacked, so the table fits a laptop screen without scrolling sideways.
     const small = (t) => '<br><span class="muted" style="font-size:13px">' + t + '</span>';
     body.innerHTML = list.map((o) => {
@@ -441,7 +938,22 @@
       const action = '<button type="button" class="btn ' + (o.status === 'Pending review' ? '' : 'ghost ') + 'small" data-rv="open" data-n="' + esc(o.number) + '">' + (o.status === 'Pending review' ? 'Review' : 'View') + '</button>';
       const at = o.createdAt ? new Date(o.createdAt) : null;
       const received = at ? { date: at.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), time: at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) } : null;
-      return '<tr' + (o.status === 'Pending review' ? ' class="row-pending"' : '') + '>' +
+      const tags = (o.allergies ? '<span class="status-badge" style="background:#FBEDEA;color:#B23A2B">Allergy</span>' : '') +
+        (o.byPhone ? '<span class="status-badge" style="background:#E4E9F3;color:#1F2A44">Phone order</span>' : '');
+      const unpaid = payOverdue(o) ? '<div class="unpaid-note">Unpaid · ' + (daysUntil(o.dateNeeded) < 0 ? 'date has passed' : daysUntil(o.dateNeeded) + ' day' + (daysUntil(o.dateNeeded) === 1 ? '' : 's') + ' to go') +
+        (o.payReminderSent ? ' · Reminder sent' : '') + '</div>' : '';
+      cards.push('<div class="order-card' + (o.status === 'Pending review' ? ' pending' : payOverdue(o) ? ' unpaid' : '') + '">' +
+        '<div class="oc-top"><strong>' + esc(o.number) + '</strong>' + badge(o.status) + '</div>' +
+        '<div class="oc-who">' + esc(o.customer.name || o.customer.email) + (isClass(o) ? '' : ' <span class="muted">· ' + esc(o.eventType || 'Occasion not given') + '</span>') + '</div>' +
+        '<div class="oc-line">' + esc(o.dateNeeded ? SN.prettyDate(o.dateNeeded, { weekday: 'short', month: 'short', day: 'numeric' }) : 'No date') + ' · ' + ful + '</div>' +
+        '<div class="oc-line">' + items + '</div>' +
+        '<div class="oc-line">' + total.replace(/<br>/g, ' ') + (received ? ' <span class="muted" style="font-size:13px">· ordered ' + esc(received.date) + '</span>' : '') + '</div>' +
+        (tags ? '<div class="oc-tags">' + tags + '</div>' : '') + unpaid +
+        '<div class="oc-actions">' + (opts ? '<label class="sr-only" for="stc-' + esc(o.number) + '">Status for ' + esc(o.number) + '</label><select class="status" id="stc-' + esc(o.number) + '" data-order="' + esc(o.number) + '">' +
+            opts.map((x) => '<option' + (x === o.status ? ' selected' : '') + '>' + x + '</option>').join('') + '</select>' : '') +
+          action.replace('btn ' + (o.status === 'Pending review' ? '' : 'ghost ') + 'small', 'btn ' + (o.status === 'Pending review' ? '' : 'ghost ')) + '</div>' +
+      '</div>');
+      return '<tr' + (o.status === 'Pending review' ? ' class="row-pending"' : payOverdue(o) ? ' class="row-unpaid"' : '') + '>' +
         '<td><div class="order-cell">' + action + '<div><strong>' + esc(o.number) + '</strong>' + (received ? '<br><span style="font-size:13px;white-space:nowrap">Ordered ' + esc(received.date) + '</span>' + small(esc(received.time)) : '') +
           (o.allergies ? '<br><span class="status-badge" style="background:#FBEDEA;color:#B23A2B;margin-top:4px">Allergy</span>' : '') +
           (o.byPhone ? '<br><span class="status-badge" style="background:#E4E9F3;color:#1F2A44;margin-top:4px">Phone order</span>' : '') + '</div></div></td>' +
@@ -449,10 +961,25 @@
         '<td class="nowrap">' + esc(o.dateNeeded ? SN.prettyDate(o.dateNeeded, { weekday: 'short', month: 'short', day: 'numeric' }) : '—') + small(ful) + '</td>' +
         '<td>' + items + '</td>' +
         '<td class="nowrap">' + total + '</td>' +
-        '<td>' + status + '</td></tr>';
+        '<td>' + status + (payOverdue(o) ? '<div class="unpaid-note">Unpaid · ' + (daysUntil(o.dateNeeded) < 0 ? 'date has passed' : daysUntil(o.dateNeeded) + ' day' + (daysUntil(o.dateNeeded) === 1 ? '' : 's') + ' to go') +
+          (o.payReminderSent ? '<br>Reminder sent' : '') + '</div>' : '') + '</td></tr>';
     }).join('');
+    $('#orders-cards').innerHTML = cards.join('');
   }
   // Newest first, by when the customer sent it.
+  // Search: each word typed must match the order somewhere. Phone numbers match by digits ("847555" finds (847) 555-…),
+  // order numbers with or without "SN-".
+  function orderMatches(o, q) {
+    if (!q) return true;
+    const c = o.customer || {};
+    const hay = [o.number, c.name, c.email, c.phone, o.eventType, o.address && o.address.zip, o.address && o.address.city, o.status]
+      .concat(o.items.map((it) => it.title || '')).join(' ').toLowerCase();
+    const digits = hay.replace(/\D/g, ' ') + ' ' + String(c.phone || '').replace(/\D/g, '');
+    return q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => {
+      const d = w.replace(/\D/g, '');
+      return hay.indexOf(w) !== -1 || (d.length >= 3 && d.length === w.replace(/[\s().+-]/g, '').length && digits.indexOf(d) !== -1);
+    });
+  }
   function sortOrders() { orders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '') || b.number.localeCompare(a.number, undefined, { numeric: true })); }
   async function onStatusChange(e) {
     const sel = e.target.closest('[data-order]');
@@ -603,6 +1130,33 @@
     return out;
   }
 
+  // Class bookings on one day, grouped into one card per class: the class, its time, spots booked of the max, and
+  // everyone booked (open the card to see them). Expired bookings aren't spots, so they're left out.
+  const dashOpenClasses = {};
+  function classCards(list, day) {
+    const groups = {};
+    list.filter((o) => o.status !== 'Expired').forEach((o) => o.items.filter((it) => it.kind === 'class').forEach((it) => {
+      const k = it.eventId || it.title;
+      const g = groups[k] = groups[k] || { key: day + '|' + k, ev: (cfg.events || []).find((e) => e.id === it.eventId), title: it.title, spots: 0, people: [] };
+      g.spots += it.qty;
+      g.people.push({ o, qty: it.qty });
+    }));
+    return Object.keys(groups).map((k) => {
+      const g = groups[k], ev = g.ev || {};
+      const max = ev.max !== '' && ev.max != null ? Number(ev.max) : 0;
+      const when = ev.start ? fmtTime(ev.start) + (ev.end ? '–' + fmtTime(ev.end) : '') : '';
+      const waiting = g.people.filter((p) => !isConfirmed(p.o)).reduce((a, p) => a + p.qty, 0);
+      return '<details class="dash-class" data-dash-class="' + esc(g.key) + '"' + (dashOpenClasses[g.key] ? ' open' : '') + '>' +
+        '<summary><strong>' + esc(ev.title || g.title) + '</strong>' +
+          '<span>' + (when ? esc(when) + ' · ' : '') + g.spots + (max ? ' of ' + max : '') + ' spot' + (g.spots === 1 && !max ? '' : 's') + ' booked' +
+          (waiting ? ' · ' + waiting + ' awaiting payment' : '') + '</span>' +
+          '<span class="dash-class-more">' + g.people.length + ' booking' + (g.people.length === 1 ? '' : 's') + '</span></summary>' +
+        '<ul>' + g.people.map((p) => '<li><button type="button" class="link-btn" data-dash-open="' + esc(p.o.number) + '">' + esc(p.o.customer.name || p.o.number) + '</button>' +
+          '<span>' + p.qty + ' spot' + (p.qty === 1 ? '' : 's') + ' · ' + esc(p.o.status) + '</span></li>').join('') + '</ul>' +
+        '</details>';
+    }).join('');
+  }
+
   function renderDashboard() {
     const box = $('#dash');
     if (!box) return;
@@ -649,15 +1203,17 @@
         tile('Confirmed sales', money(tc.money), tp.orders ? '<span class="dash-pend">+' + money(tp.money) + ' estimated pending</span>' : '') +
       '</div>' +
       '<div class="dash-cal">' + days.map((d) => {
-        const list = inWeek.filter((o) => o.dateNeeded === d).sort((a, b) => Number(isPending(a)) - Number(isPending(b)));
-        return '<div class="dash-day' + (d === today ? ' today' : '') + '"><div class="dash-day-h">' + esc(dayLabel(d)) + (d === today ? ' · today' : '') + '</div>' +
+        const all = inWeek.filter((o) => o.dateNeeded === d);
+        const list = all.filter((o) => !isClass(o)).sort((a, b) => Number(isPending(a)) - Number(isPending(b)));
+        const cards = classCards(all.filter(isClass), d);
+        return '<div class="dash-day' + (d === today ? ' today' : '') + '"><div class="dash-day-h">' + esc(dayLabel(d)) + (d === today ? ' · today' : '') + '</div>' + cards +
           (list.length ? list.map((o) => {
             const what = o.items.map((it) => it.kind === 'class' ? it.qty + ' × ' + it.title : it.qty + ' ' + (it.kind === 'custom' ? 'custom' : it.kind)).join(', ');
             const how = isClass(o) ? 'Class' : o.fulfillment === 'delivery' ? 'Drop-off' : 'Pickup';
             return '<button type="button" class="dash-order' + (isPending(o) ? ' pending' : '') + '" data-dash-open="' + esc(o.number) + '" style="border-left-color:' + ((STATUS_STYLE[o.status] || '').match(/color:([^;]+)/) || [, 'var(--navy)'])[1] + '">' +
               '<strong>' + esc(o.number) + '</strong> ' + esc((o.customer.name || '').split(' ')[0]) +
               '<span>' + esc(what) + '</span><span>' + esc(how) + ' · ' + esc(o.status) + (o.allergies ? ' · Allergy' : '') + '</span></button>';
-          }).join('') : '<p class="hint" style="margin:6px 0 0">Nothing due</p>') +
+          }).join('') : cards ? '' : '<p class="hint" style="margin:6px 0 0">Nothing due</p>') +
         '</div>';
       }).join('') + '</div>' +
       '<div class="dash-cols">' +
@@ -689,25 +1245,51 @@
       orders = d.orders;
       sortOrders();
       weekCounts = d.weekCounts || {};
+      health = newerHealth(d.health);
+      renderHealth();
       messages = d.messages;
       codes = d.codes || [];
       cfg.events = cfg.events.map((e) => { const fresh = (d.config.events || []).find((x) => x.id === e.id); return fresh ? Object.assign(e, { booked: fresh.booked, spotsLeft: fresh.spotsLeft }) : e; });
       dashRefreshed = new Date();
+      if (d.stamp && d.stamp !== stamp) othersSaved(d);
       renderOrders(); renderMessages(); renderCodes(); renderBusyDays(); renderDashboard();
       // An open order panel shows the fresh status and QuickBooks balance too (its typed text lives in rv, so it's kept).
       if (rv && orders.some((x) => x.number === rv.number)) renderReview();
     });
   }
 
+  // Someone else saved settings (another tab, a helper, or the Sheet itself). With nothing unsaved here, this tab just
+  // shows the new settings. With unsaved edits, they stay, and the save bar says what changed; Save keeps both.
+  function othersSaved(d) {
+    const theirs = cleaned(d.config), mine = cleaned();
+    const keys = Object.keys(theirs).filter((k) => !same(theirs[k], base[k]));
+    if (!dirty) {
+      cfg = d.config;
+      base = theirs;
+      stamp = d.stamp;
+      renderSettings();
+      if (keys.length) toast('Settings updated: someone else saved changes to ' + fieldList(keys) + '.', 6000);
+      return;
+    }
+    const both = keys.filter((k) => !same(mine[k], base[k]) && !same(mine[k], theirs[k]));
+    const others = keys.filter((k) => both.indexOf(k) === -1);
+    saveWarning((others.length ? 'Someone else just saved changes to ' + fieldList(others) + '. ' : '') + (both.length
+      ? (others.length ? 'They also changed ' : 'Someone else just saved a different version of ') + fieldList(both) + ': when you save, you’ll pick which to keep.'
+      : 'Your edits are safe: saving keeps their changes too.'));
+  }
+
   // Payments are marked Paid in the Sheet every 5 minutes, so an open admin reloads orders every 2 minutes, and when
   // Melissa comes back to the tab. Not while she's in an order panel or busy, so nothing she's typing moves.
   const AUTO_REFRESH_MS = 2 * 60000;
-  function autoRefresh() {
-    if (!dashRefreshed || document.hidden || busy || rv || Object.keys(replyOpen).length || Date.now() - (dashRefreshed ? dashRefreshed.getTime() : 0) < AUTO_REFRESH_MS - 5000) return;
+  // Coming back to the page (another tab, window or browser) checks within seconds, so others' saves show up then.
+  function autoRefresh(e) {
+    const gap = e && e.type ? 10000 : AUTO_REFRESH_MS - 5000;
+    if (!dashRefreshed || document.hidden || busy || rv || Object.keys(replyOpen).length || Date.now() - (dashRefreshed ? dashRefreshed.getTime() : 0) < gap) return;
     refreshOrders().catch(() => { /* try again next time */ });
   }
   setInterval(autoRefresh, AUTO_REFRESH_MS);
   document.addEventListener('visibilitychange', autoRefresh);
+  window.addEventListener('focus', autoRefresh);
 
   function onDashClick(b) {
     if (b.dataset.dashOpen) { openReview(b.dataset.dashOpen, b); return; }
@@ -1384,6 +1966,25 @@
     }
   }
 
+  /* ---------- Daily health check: red banner while something's wrong ---------- */
+  let health = null;        // the last morning check (or "Run health check now"): { at, problems: [{ id, title, fix }] }
+  const healthWhen = (iso) => new Date(iso).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  // A check more than 2 days old means the morning check itself has stopped.
+  const healthStale = () => health && Date.now() - Date.parse(health.at) > 2 * 864e5;
+  // A reload that started before a check finished brings back the older result; keep whichever is newest.
+  const newerHealth = (h) => (!h ? health : !health || Date.parse(h.at) >= Date.parse(health.at) ? h : health);
+  function renderHealth() {
+    const box = $('#health-banner');
+    if (!box) return;
+    const probs = (health && health.problems) || [];
+    if (!probs.length && !healthStale()) { box.innerHTML = ''; return; }
+    const list = probs.length ? probs : [{ title: 'The morning health check hasn’t run since ' + healthWhen(health.at), fix: 'Go to Payments and click Run health check now; that schedules it again.' }];
+    box.innerHTML = '<div class="health-alert" role="alert"><strong>' + (list.length === 1 ? 'Something on your website needs attention' : list.length + ' things on your website need attention') + '</strong>' +
+      '<ul>' + list.map((x) => '<li><strong>' + esc(x.title) + '.</strong> ' + esc(x.fix) + '</li>').join('') + '</ul>' +
+      '<div class="row-gap" style="gap:8px;align-items:center"><button type="button" class="btn small" data-pay="health">Check again</button>' +
+        '<span class="hint" style="margin:0">Checked ' + esc(healthWhen(health.at)) + '</span></div></div>';
+  }
+
   /* ---------- Payments: QuickBooks (cookie invoices) and Square (class checkout) ---------- */
   let payInfo = null;       // from adminPayments; loaded the first time the tab opens (it calls QuickBooks and Square)
   function sectionPayments() {
@@ -1422,7 +2023,8 @@
     const last = lc
       ? 'Last check ' + when(lc.at) + ': ' + [lc.invoicesPaid.length ? lc.invoicesPaid.length + ' invoice' + (lc.invoicesPaid.length > 1 ? 's' : '') + ' paid' : '',
           lc.classesPaid.length ? lc.classesPaid.length + ' class booking' + (lc.classesPaid.length > 1 ? 's' : '') + ' paid' : '',
-          lc.expired.length ? lc.expired.length + ' expired' : ''].filter(Boolean).join(', ').replace(/^$/, 'nothing new') + '.' +
+          lc.expired.length ? lc.expired.length + ' expired' : '',
+          lc.completed && lc.completed.length ? lc.completed.length + ' past order' + (lc.completed.length > 1 ? 's' : '') + ' marked Completed' : ''].filter(Boolean).join(', ').replace(/^$/, 'nothing new') + '.' +
         (lc.errors.length ? ' <span class="err">' + esc(lc.errors.join(' · ')) + '</span>' : '')
       : 'No check has run yet.';
     $('#pay-box').innerHTML =
@@ -1431,6 +2033,10 @@
         '<div class="field"><h3 class="rv-h" style="margin-top:0">QuickBooks ' + (qb.keys ? env(qb.env) : '') + '</h3>' + qbBody + '</div>' +
         '<div class="field"><h3 class="rv-h" style="margin-top:0">Square ' + (sq.ready ? env(sq.env) : '') + '</h3>' + sqBody + '</div>' +
       '</div>' +
+      '<h3 class="rv-h">Daily health check</h3>' +
+      '<p>' + (p.healthTrigger ? 'Runs every morning at 7: QuickBooks, Square, the payment check, emails and Google’s daily limits. It emails you only when something needs fixing.' : '<span class="err">Not scheduled yet. Click Run health check now to schedule it.</span>') + ' ' +
+        (health ? 'Last check ' + esc(healthWhen(health.at)) + ': ' + (health.problems.length ? '<span class="err">' + health.problems.length + ' to fix (see the red box at the top).</span>' : 'all good.') : 'It hasn’t run yet.') + '</p>' +
+      '<div class="row-gap" style="gap:8px;margin-top:10px"><button type="button" class="btn ghost small" data-pay="health">Run health check now</button></div>' +
       '<h3 class="rv-h">Payment check</h3>' +
       '<p>' + (p.trigger ? 'Runs every 5 minutes.' : '<span class="err">Not scheduled. Click Check now to schedule it.</span>') + ' ' + last + '</p>' +
       '<div class="row-gap" style="gap:8px;margin-top:10px"><button type="button" class="btn ghost small" data-pay="check">Check now</button><button type="button" class="btn ghost small" data-pay="refresh">Refresh</button></div>';
@@ -1446,6 +2052,20 @@
         .catch((err) => { if (w) w.close(); failed(err); });
       return;
     }
+    if (act === 'health') {
+      if (busy) return;
+      busy = true;
+      const label = b.textContent;
+      b.classList.add('is-busy'); b.disabled = true;
+      server('adminRunHealthCheck').then((r) => {
+        busy = false; b.classList.remove('is-busy'); b.disabled = false; b.textContent = label;
+        health = r;
+        renderHealth();
+        toast(r.problems.length ? r.problems.length + ' thing' + (r.problems.length === 1 ? '' : 's') + ' to fix: see the red box at the top.' : 'All good: everything is working.', r.problems.length ? 6000 : 3200);
+        if (payInfo) loadPayments();
+      }).catch((err) => { busy = false; b.classList.remove('is-busy'); b.disabled = false; failed(err); });
+      return;
+    }
     if (act === 'disconnect' && !(await ask({ title: 'Disconnect QuickBooks?', text: 'Approved orders won’t get QuickBooks invoices until you connect again.', yes: 'Disconnect', no: 'Stay connected', danger: true }))) return;
     const fn = { items: 'adminQbSetupItems', disconnect: 'adminQbDisconnect', check: 'adminCheckPaymentsNow' }[act];
     if (!fn) return;
@@ -1455,7 +2075,7 @@
       busy = false;
       if (act === 'check') {
         if (!r.ok) toast(r.error);
-        else toast('Checked: ' + (r.invoicesPaid.length + r.classesPaid.length) + ' newly paid, ' + r.expired.length + ' expired' + (r.errors.length ? '. Problems: ' + r.errors.join(' · ') : ''), r.errors.length ? 8000 : 3600);
+        else toast('Checked: ' + (r.invoicesPaid.length + r.classesPaid.length) + ' newly paid, ' + r.expired.length + ' expired' + (r.completed && r.completed.length ? ', ' + r.completed.length + ' completed' : '') + (r.errors.length ? '. Problems: ' + r.errors.join(' · ') : ''), r.errors.length ? 8000 : 3600);
         refreshOrders().catch((err) => toast('Checked, but the orders list didn’t reload (' + (err && err.message ? err.message : err) + '). Click Refresh on the Dashboard.', 8000));
       }
       if (act === 'items') toast('Invoice items are ready in QuickBooks');
@@ -1600,7 +2220,7 @@
     $('#faq-editor').innerHTML = n ? cfg.faqs.map((f, i) =>
       '<div class="faq-edit"><div class="faq-edit-top"><span class="num">Question ' + (i + 1) + '</span>' + moveButtons('faqs', i, n, 'question ' + (i + 1)) + '</div>' +
         '<label class="sr-only" for="fq-' + i + '">Question ' + (i + 1) + '</label>' +
-        '<input class="input" id="fq-' + i + '" type="text" placeholder="Question" data-list="faqs" data-i="' + i + '" data-key="q" value="' + esc(f.q) + '" style="font-weight:600">' +
+        '<textarea class="input one-line" rows="1" id="fq-' + i + '" placeholder="Question" data-list="faqs" data-i="' + i + '" data-key="q" style="font-weight:600">' + esc(f.q) + '</textarea>' +
         '<label class="sr-only" for="fa-' + i + '">Answer ' + (i + 1) + '</label>' +
         '<textarea class="input" id="fa-' + i + '" rows="3" placeholder="Answer" data-list="faqs" data-i="' + i + '" data-key="a">' + esc(f.a) + '</textarea>' +
       '</div>').join('') : '<p class="hint">No questions yet. Add one below.</p>';
@@ -1616,19 +2236,19 @@
         '<div class="faq-edit-top"><span class="num">Event ' + (i + 1) + '</span><span class="row-gap" style="gap:6px">' +
           '<button type="button" class="switch" role="switch" aria-checked="' + (ev.show !== false) + '" data-act="toggle-show" data-list="events" data-i="' + i + '" aria-label="Show event ' + (i + 1) + ' on the page"><span class="track" aria-hidden="true"></span>' + (ev.show !== false ? 'Showing' : 'Hidden') + '</button>' +
           moveButtons('events', i, n, 'event ' + (i + 1)) + '</span></div>' +
-        field(id('title'), 'Title', '<input class="input" id="' + id('title') + '" type="text" ' + attrs('title') + ' value="' + esc(ev.title) + '" style="font-weight:600">') +
+        field(id('title'), 'Title', '<textarea class="input one-line" rows="1" id="' + id('title') + '" ' + attrs('title') + ' style="font-weight:600">' + esc(ev.title) + '</textarea>') +
         '<div class="grid-2">' +
           field(id('date'), 'Date', '<input class="input" id="' + id('date') + '" type="date" ' + attrs('date') + ' value="' + esc(ev.date) + '">') +
-          field(id('venue'), 'Location name', '<input class="input" id="' + id('venue') + '" type="text" ' + attrs('venue') + ' value="' + esc(ev.venue) + '" placeholder="e.g. Khepri Kitchen & Coffee">') +
+          field(id('venue'), 'Location name', '<textarea class="input one-line" rows="1" id="' + id('venue') + '" ' + attrs('venue') + ' placeholder="e.g. Khepri Kitchen & Coffee">' + esc(ev.venue) + '</textarea>') +
           field(id('start'), 'Start time', '<input class="input" id="' + id('start') + '" type="text" ' + attrs('start') + ' value="' + esc(ev.start) + '" placeholder="e.g. 2:00 PM">') +
           field(id('end'), 'End time', '<input class="input" id="' + id('end') + '" type="text" ' + attrs('end') + ' value="' + esc(ev.end) + '" placeholder="e.g. 4:00 PM">') +
           field(id('price'), 'Price per person', '<div class="input-wrap"><span>$</span><input id="' + id('price') + '" type="number" min="0" step="1" ' + attrs('price') + ' value="' + esc(ev.price) + '"></div>') +
           field(id('max'), 'Max attendees', '<input class="input" id="' + id('max') + '" type="number" min="1" ' + attrs('max') + ' value="' + esc(ev.max) + '" placeholder="No limit">',
             ev.button === 'Add to bag' && ev.max !== '' && ev.max != null ? (ev.booked || 0) + ' booked, ' + Math.max(0, ev.max - (ev.booked || 0)) + ' spots left' : (ev.booked ? ev.booked + ' booked' : '')) +
         '</div>' +
-        field(id('address'), 'Address', '<input class="input" id="' + id('address') + '" type="text" ' + attrs('address') + ' value="' + esc(ev.address) + '" placeholder="e.g. 106 S. Emerson St., Mount Prospect, IL">', 'Customers tap it for directions in their maps app.') +
-        field(id('when'), 'Small text above the title (optional)', '<input class="input" id="' + id('when') + '" type="text" ' + attrs('when') + ' value="' + esc(ev.when) + '" placeholder="e.g. Holiday special">', 'Leave blank to show the date and time there instead.') +
-        field(id('summary'), 'Short line on the card (optional)', '<input class="input" id="' + id('summary') + '" type="text" ' + attrs('summary') + ' value="' + esc(ev.summary) + '" placeholder="e.g. Decorate 6 fall cookies to take home. All supplies included.">', 'Leave blank to show the start of the description.') +
+        field(id('address'), 'Address', '<textarea class="input one-line" rows="1" id="' + id('address') + '" ' + attrs('address') + ' placeholder="e.g. 106 S. Emerson St., Mount Prospect, IL">' + esc(ev.address) + '</textarea>', 'Customers tap it for directions in their maps app.') +
+        field(id('when'), 'Small text above the title (optional)', '<textarea class="input one-line" rows="1" id="' + id('when') + '" ' + attrs('when') + ' placeholder="e.g. Holiday special">' + esc(ev.when) + '</textarea>', 'Leave blank to show the date and time there instead.') +
+        field(id('summary'), 'Short line on the card (optional)', '<textarea class="input one-line" rows="1" id="' + id('summary') + '" ' + attrs('summary') + ' placeholder="e.g. Decorate 6 fall cookies to take home. All supplies included.">' + esc(ev.summary) + '</textarea>', 'Leave blank to show the start of the description.') +
         field(id('desc'), 'Full description', '<textarea class="input" id="' + id('desc') + '" rows="4" ' + attrs('desc') + '>' + esc(ev.desc) + '</textarea>', 'Shows when customers tap "See details".') +
         photoField(id('photo'), 'Photo', attrs('photo') + ' value="' + esc(ev.photo) + '"') +
         photoField(id('flyer'), 'Flyer (optional)', attrs('flyer') + ' value="' + esc(ev.flyer) + '"') +
@@ -1645,7 +2265,7 @@
       '<div class="flavor-row" style="flex-wrap:wrap;gap:10px' + (g.show === false ? ';opacity:.7' : '') + '">' +
         '<span class="photo-thumb" data-thumb-for="gp-' + i + '"></span>' +
         '<div style="flex:2 1 220px;min-width:0"><label class="sr-only" for="gp-' + i + '">Photo ' + (i + 1) + ' link</label><input class="input" id="gp-' + i + '" type="text" placeholder="Photo link" data-list="gallery" data-i="' + i + '" data-key="photo" value="' + esc(g.photo) + '"></div>' +
-        '<div style="flex:1 1 160px;min-width:0"><label class="sr-only" for="gc-' + i + '">Photo ' + (i + 1) + ' caption</label><input class="input" id="gc-' + i + '" type="text" placeholder="Caption (for screen readers)" data-list="gallery" data-i="' + i + '" data-key="caption" value="' + esc(g.caption) + '"></div>' +
+        '<div style="flex:1 1 160px;min-width:0"><label class="sr-only" for="gc-' + i + '">Photo ' + (i + 1) + ' caption</label><input class="input" id="gc-' + i + '" type="text" placeholder="What it shows, e.g. Baby shower (helps Google)" data-list="gallery" data-i="' + i + '" data-key="caption" value="' + esc(g.caption) + '"></div>' +
         '<div style="display:flex;align-items:center;gap:6px">' +
           '<button type="button" class="switch" role="switch" aria-checked="' + (g.show !== false) + '" data-act="toggle-show" data-list="gallery" data-i="' + i + '" aria-label="Show photo ' + (i + 1) + '"><span class="track" aria-hidden="true"></span>' + (g.show !== false ? 'Showing' : 'Hidden') + '</button>' +
           moveButtons('gallery', i, n, 'photo ' + (i + 1)) +
@@ -1822,17 +2442,39 @@
   }
 
   /* ---------- Save, preview, discard ---------- */
-  function cleaned() {
-    const c = SN.clone(cfg);
-    c.zones = c.zones.filter((z) => /^\d{5}$/.test(z.zip));
-    c.faqs = c.faqs.filter((f) => (f.q || '').trim() || (f.a || '').trim());
-    c.events = c.events.filter((e) => (e.title || '').trim()).map((e) => { delete e.booked; delete e.spotsLeft; return e; });
-    c.gallery = c.gallery.filter((g) => (g.photo || '').trim());
+  function cleaned(from) {
+    const c = SN.clone(from || cfg);
+    c.zones = (c.zones || []).filter((z) => /^\d{5}$/.test(z.zip));
+    c.faqs = (c.faqs || []).filter((f) => (f.q || '').trim() || (f.a || '').trim());
+    c.events = (c.events || []).filter((e) => (e.title || '').trim()).map((e) => { delete e.booked; delete e.spotsLeft; return e; });
+    c.gallery = (c.gallery || []).filter((g) => (g.photo || '').trim());
     c.homeItems = (c.homeItems || []).filter((h) => (h.name || '').trim());
     c.homeSlides = (c.homeSlides || []).filter((h) => (h.photo || '').trim());
     delete c.weekCounts;   // booking counts come from orders, not settings
+    delete c.codeVersion;
     delete c.images;
     return c;
+  }
+  // Same setting? Compared by value: the order of an item's details can differ between loads (Google doesn't keep it),
+  // and a blank detail counts the same as a missing one.
+  const sortedJson = (v) => JSON.stringify(v === undefined ? null : v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x)
+    ? Object.keys(x).sort().reduce((o, key) => { if (x[key] != null) o[key] = x[key]; return o; }, {}) : x));
+  const same = (a, b) => sortedJson(a) === sortedJson(b);
+  // What changed in this tab since the settings were loaded or saved.
+  const changedKeys = (c) => Object.keys(Object.assign({}, c, base)).filter((k) => !same(c[k], base[k]));
+  // Plain names for settings, for "someone else changed …".
+  const SETTING_NAMES = { flavors: 'artisan flavors', blockedRanges: 'blocked dates', zones: 'drop-off zones', faqs: 'the FAQ', events: 'Special Events',
+    gallery: 'the gallery', homeItems: 'the home page list', homeSlides: 'the home page slideshow', pages: 'page photos', acceptingOrders: 'taking orders on/off',
+    maintenanceMode: 'maintenance mode', showAbout: 'showing the About page', showEvents: 'showing Special Events', showGallery: 'showing the Gallery', showFaq: 'showing the FAQ' };
+  function settingName(k) {
+    if (SETTING_NAMES[k]) return SETTING_NAMES[k];
+    const el = $('[data-path="' + k + '"]');
+    const label = el && el.id && $('label[for="' + el.id + '"]');
+    return label ? '“' + label.textContent.replace(/\s*\(.*$/, '').trim() + '”' : k.replace(/([A-Z])/g, ' $1').toLowerCase();
+  }
+  function fieldList(keys) {
+    const n = keys.map(settingName);
+    return n.length > 3 ? n.slice(0, 3).join(', ') + ' and ' + (n.length - 3) + ' more' : n.length > 1 ? n.slice(0, -1).join(', ') + ' and ' + n[n.length - 1] : n[0] || 'the settings';
   }
   async function save(force) {
     if (busy) return;
@@ -1845,26 +2487,49 @@
     }
     const badZip = cfg.zones.find((z) => z.zip && !/^\d{5}$/.test(z.zip));
     if (badZip && !(await ask({ title: 'Check that ZIP code', text: 'ZIP “' + badZip.zip + '” isn’t 5 digits, so it won’t be saved. Save everything else anyway?', yes: 'Save anyway', no: 'Fix it first' }))) return;
+    const keys = changedKeys(c);
+    if (!keys.length) { clearDirty(); toast('Nothing to save: no changes.'); return; }
+    const changes = {}, was = {};
+    keys.forEach((k) => { changes[k] = c[k] === undefined ? null : c[k]; was[k] = base[k] === undefined ? null : base[k]; });
     busy = true;
-    $$('[data-save]').forEach((b) => { b.textContent = 'Saving…'; });
-    server('adminSaveSettings', c, stamp, !!force).then((r) => {
+    $$('[data-save]').forEach((b) => { b.textContent = 'Saving…'; b.classList.add('is-busy'); });
+    server('adminSaveSettings', changes, was, !!force).then(async (r) => {
       busy = false;
-      $$('[data-save]').forEach((b) => { b.textContent = 'Save changes'; });
+      $$('[data-save]').forEach((b) => { b.textContent = 'Save changes'; b.classList.remove('is-busy'); });
       if (r.conflict) {
-        ask({
-          title: 'The Sheet changed',
-          text: 'Someone changed the settings directly in the Google Sheet since you opened this page.',
-          points: ['Save mine: your version replaces those Sheet changes.', 'Keep editing: nothing is saved. To see the Sheet’s version, reload this page (your unsaved edits here would be lost).'],
-          yes: 'Save mine', no: 'Keep editing'
-        }).then((ok) => { if (ok) save(true); });
+        if (!r.fields || !r.fields.length || !r.config) {
+          if (await ask({ title: 'The settings changed', text: 'Someone else saved changes since you opened this page.',
+            points: ['Save mine: your version replaces theirs.', 'Keep editing: nothing is saved. Reload the page to see their version (your unsaved edits would be lost).'],
+            yes: 'Save mine', no: 'Keep editing' })) save(true);
+          return;
+        }
+        const names = fieldList(r.fields);
+        const pick = await ask({
+          title: 'Someone else changed this too',
+          text: 'Since you opened this page, someone else saved a different version of ' + names + '.',
+          points: ['Save mine: your version of ' + names + ' is saved instead of theirs.', 'Use theirs: their version is kept; the rest of your changes are saved.', 'Keep editing: nothing is saved yet.'],
+          yes: 'Save mine', alt: 'Use theirs', no: 'Keep editing'
+        });
+        if (pick === 'alt' && r.config) {
+          // Take their version of those settings (and anything else they changed that this tab didn't), then save the rest.
+          const theirs = cleaned(r.config), mine = cleaned();
+          Object.keys(theirs).forEach((k) => {
+            if ((r.fields || []).indexOf(k) !== -1 || same(mine[k], base[k])) { cfg[k] = SN.clone(r.config[k]); base[k] = theirs[k]; }
+          });
+          renderSettings();
+          if (changedKeys(cleaned()).length) save(false);
+          else { stamp = r.stamp; clearDirty(); toast('Kept their version. Nothing else to save.'); }
+        } else if (pick === true) save(true);
         return;
       }
+      const theirs = Object.keys(cleaned(r.config)).filter((k) => keys.indexOf(k) === -1 && !same(cleaned(r.config)[k], base[k]));
       cfg = r.config;
+      base = cleaned(cfg);
       stamp = r.stamp;
       clearDirty();
       renderSettings();
-      toast('Saved. The website shows your changes now.');
-    }).catch((err) => { $$('[data-save]').forEach((b) => { b.textContent = 'Save changes'; }); failed(err); });
+      toast('Saved. The website shows your changes now.' + (theirs.length ? ' Changes someone else saved to ' + fieldList(theirs) + ' are kept too.' : ''), theirs.length ? 6000 : 3200);
+    }).catch((err) => { busy = false; $$('[data-save]').forEach((b) => { b.textContent = 'Save changes'; b.classList.remove('is-busy'); }); failed(err); });
   }
   // Preview changes: save the unsaved edits to the Sheet's Draft tab, then open the website in preview mode.
   function preview() {
@@ -1877,9 +2542,23 @@
     }).catch((err) => { if (w) w.close(); failed(err); });
   }
   function discard() {
-    server('adminClearDraft').then(load).then(() => toast('Changes discarded')).catch(failed);
+    const spots = {};
+    (cfg.events || []).forEach((e) => { spots[e.id] = { booked: e.booked, spotsLeft: e.spotsLeft }; });
+    changedKeys(cleaned()).forEach((k) => { if (base[k] === undefined) delete cfg[k]; else cfg[k] = SN.clone(base[k]); });
+    (cfg.events || []).forEach((e) => { if (spots[e.id]) Object.assign(e, spots[e.id]); });   // class bookings aren't settings
+    clearDirty();
+    renderSettings();
+    toast('Changes discarded');
+    server('adminClearDraft').catch(() => { /* a leftover preview draft is cleared by the next Save */ });
   }
 
+  // A text box grows to fit its text. Only boxes on screen can be measured, so this runs when a tab opens too.
+  function grow(el) {
+    if (!el.offsetParent) return;
+    el.style.height = 'auto';
+    el.style.height = (el.scrollHeight + 2) + 'px';
+  }
+  const growAll = () => $$('textarea').forEach(grow);
   function renderSettings() {
     fillFields();
     renderFlavors();
@@ -1891,18 +2570,28 @@
     renderHomeItems();
     renderHomeSlides();
     renderBusyDays();
+    growAll();
   }
 
+  let growTimer = null;
+  window.addEventListener('resize', () => { clearTimeout(growTimer); growTimer = setTimeout(growAll, 150); });
   function wire() {
+    document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('one-line')) e.preventDefault(); });
     document.addEventListener('input', (e) => {
+      if (e.target.classList && e.target.classList.contains('one-line') && /[\r\n]/.test(e.target.value)) e.target.value = e.target.value.replace(/\s*[\r\n]+\s*/g, ' ');
+      if (e.target.tagName === 'TEXTAREA') grow(e.target);
       if (po && e.target.closest('#review')) { onPhoneInput(e); return; }
       if (e.target.closest('#review')) { onReviewInput(e); return; }
       if (e.target.dataset.msgDraft) { replyOpen[e.target.dataset.msgDraft] = e.target.value; return; }
       onInput(e);
     });
     document.addEventListener('change', (e) => {
-      if (e.target.matches('#orders-body [data-order]')) onStatusChange(e);
+      if (e.target.matches('#orders-body [data-order], #orders-cards [data-order]')) onStatusChange(e);
     });
+    document.addEventListener('toggle', (e) => {
+      const k = e.target.getAttribute && e.target.getAttribute('data-dash-class');
+      if (k) dashOpenClasses[k] = e.target.open;
+    }, true);
     document.addEventListener('click', (e) => {
       const pob = e.target.closest('[data-po]');
       if (pob) { onPhoneClick(pob); return; }
@@ -1920,7 +2609,32 @@
       if (e.target.closest('[data-preview]')) { preview(); return; }
     });
     $('#accepting').addEventListener('click', () => { cfg.acceptingOrders = !cfg.acceptingOrders; fillFields(); markDirty(); });
-    $('#orders-toggle').addEventListener('click', () => { showAllOrders = !showAllOrders; renderOrders(); });
+    $('#orders-search').addEventListener('input', (e) => { orderSearch = e.target.value.trim(); renderOrders(); });
+    $('#help-search').addEventListener('input', (e) => filterHelp(e.target.value.trim()));
+    $('[data-tabbar="more"]').addEventListener('click', () => openMore($('#more-sheet').hidden));
+    $('#more-sheet').addEventListener('click', (e) => {
+      if (e.target.closest('[data-more-close]')) openMore(false);
+      else if (e.target.closest('[data-more-refresh]')) { openMore(false); $('#refresh-site').click(); }
+      else if (e.target.closest('a[target="_blank"]')) openMore(false);
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#more-sheet').hidden) openMore(false); });
+    $('[data-orders-how]').addEventListener('click', (e) => {
+      const open = !$('#orders').classList.contains('show-how');
+      $('#orders').classList.toggle('show-how', open);
+      e.currentTarget.setAttribute('aria-expanded', String(open));
+      e.currentTarget.textContent = open ? 'Hide how orders work' : 'How orders work';
+    });
+    $('#orders').addEventListener('click', (e) => {
+      const tab = e.target.closest('[data-orders-view]');
+      if (tab) { ordersView = tab.dataset.ordersView; renderOrders(); return; }
+      if (e.target.closest('[data-clear-search]')) { $('#orders-search').value = ''; orderSearch = ''; renderOrders(); $('#orders-search').focus(); } });
+    // After editing the Sheet directly: the website stops using its saved copy, and this page reloads the Sheet too.
+    $('#refresh-site').addEventListener('click', async (e) => {
+      const b = e.currentTarget;
+      if (dirty && !(await ask({ title: 'Drop your unsaved changes?', text: 'Refreshing reloads everything from the Sheet, so changes you haven’t saved here are lost.', yes: 'Refresh anyway', no: 'Keep editing' }))) return;
+      b.classList.add('is-busy'); b.disabled = true;
+      server('adminRefreshSite').then(() => { location.reload(); }).catch((err) => { b.classList.remove('is-busy'); b.disabled = false; failed(err); });
+    });
     $('#discard').addEventListener('click', discard);
     $('#scrim').addEventListener('click', closeReview);
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && (rv || po)) closeReview(); });
@@ -1971,6 +2685,7 @@
   function load() {
     return server('adminLoad').then((d) => {
       cfg = d.config;
+      base = cleaned(cfg);
       stamp = d.stamp;
       orders = d.orders;
       sortOrders();
@@ -1978,6 +2693,7 @@
       codes = d.codes || [];
       weekCounts = d.weekCounts || {};
       sheetUrl = d.sheetUrl;
+      health = newerHealth(d.health);
       if (!$('#save-bar')) shell();
       clearDirty();
       // Coming back from a preview? The unsaved edits are still in the Sheet's Draft tab.
@@ -1996,6 +2712,7 @@
       fillCodeForm(null);
       dashRefreshed = new Date();
       renderDashboard();
+      renderHealth();
     });
   }
   load().catch((err) => {

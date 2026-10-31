@@ -322,6 +322,8 @@ body.locked .toast { z-index: 60; }
   .admin-nav a[aria-current="page"] { box-shadow: inset 0 -3px 0 var(--coral); }
 }
 /* Admin orders table: Review button first, details stacked so it fits a laptop without scrolling sideways. */
+.row-unpaid > td { background: #FBEDEA; }
+.unpaid-note { margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--error); line-height: 1.35; }
 .orders-table td { vertical-align: top; padding-top: 14px; padding-bottom: 14px; }
 .orders-table .order-cell { display: flex; gap: 12px; align-items: flex-start; }
 .orders-table .order-cell .btn { flex: none; min-width: 78px; }
@@ -397,6 +399,8 @@ td .input { padding: 8px 10px; }
 .chip button { width: 28px; height: 28px; border: 0; border-radius: 50%; background: transparent; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
 .save-bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--navy); color: var(--white); z-index: 20; transform: translateY(100%); transition: transform .25s ease; }
 .save-bar.show { transform: translateY(0); }
+.save-bar.warn { background: #8E3A2E; }
+.save-bar.warn #save-bar-text { max-width: 640px; font-size: 14px; }
 .save-bar .wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; padding-bottom: 12px; }
 .empty-row td { color: var(--muted); text-align: center; padding: 24px; }
 
@@ -589,3 +593,106 @@ html.sn-maint body > *:not(#maint) { display: none !important; }
 .legal ul { margin: 0 0 12px; padding-left: 22px; }
 .legal li { margin: 0 0 6px; }
 .legal a { color: var(--coral-dark); }
+/* Dashboard: one card per class, with the people booked inside */
+.dash-class { background: var(--white); border: 1px solid var(--line); border-left: 4px solid var(--coral); border-radius: 8px; font-size: 13px; color: var(--navy); }
+.dash-class summary { list-style: none; cursor: pointer; padding: 8px; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.dash-class summary::-webkit-details-marker { display: none; }
+.dash-class summary span { color: var(--muted); font-size: 12px; }
+.dash-class summary .dash-class-more { color: var(--coral); font-weight: 600; }
+.dash-class summary .dash-class-more::after { content: " ▾"; }
+.dash-class[open] summary .dash-class-more::after { content: " ▴"; }
+.dash-class summary:hover { background: #FFF6F2; }
+.dash-class ul { list-style: none; margin: 0; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 8px; }
+.dash-class li { display: flex; flex-direction: column; }
+.dash-class li .link-btn { padding: 0; text-align: left; font-size: 13px; }
+.dash-class li span { color: var(--muted); font-size: 12px; }
+.proto-banner.code-old { background: #8E3A2E; color: #fff; font-weight: 600; }
+/* Daily health check: shown at the top of every admin tab while something needs fixing */
+.health-alert { background: #FFF1EE; border: 2px solid #C0432F; border-radius: 14px; padding: 14px 18px; margin-bottom: 18px; color: var(--navy); }
+.health-alert > strong { color: #8E3A2E; font-size: 16px; }
+.health-alert ul { margin: 8px 0 12px; padding-left: 20px; font-size: 14px; }
+.health-alert li { margin-bottom: 6px; }
+/* Orders: search box above the list */
+.orders-search { margin: 14px 0 6px; max-width: 460px; }
+.orders-search .hint { margin: 6px 0 0; min-height: 1em; }
+/* Orders: Active / Past tabs inside the page */
+.order-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-top: 16px; }
+.order-tabs button { font: inherit; font-weight: 600; font-size: 15px; color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 8px 14px; margin-bottom: -1px; cursor: pointer; }
+.order-tabs button[aria-selected="true"] { color: var(--navy); border-bottom-color: var(--coral); }
+.order-tabs button:hover { color: var(--navy); }
+/* ---------- Admin on phones and small tablets ---------- */
+.admin-tabbar, .more-sheet, .order-cards, .orders-how { display: none; }
+@media (max-width: 900px) {
+  /* The sideways menu becomes a bar at the bottom; the header buttons live in More. */
+  .admin-nav { display: none; }
+  .admin-header .row-gap { display: none; }
+  .admin-layout { padding-bottom: 150px; }
+  .admin-tabbar { display: grid; grid-template-columns: repeat(4, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 25; background: var(--white);
+    border-top: 1px solid var(--line); padding: 4px 4px calc(4px + env(safe-area-inset-bottom)); box-shadow: 0 -6px 20px rgba(31, 42, 68, .08); }
+  .admin-tabbar a, .admin-tabbar button { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 2px 6px; font: inherit;
+    font-size: 12px; font-weight: 600; color: var(--muted); text-decoration: none; background: none; border: 0; border-radius: 10px; cursor: pointer; }
+  .admin-tabbar [aria-current="page"] { color: var(--coral); }
+  .tabbar-count { position: absolute; top: 3px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--coral);
+    color: var(--white); font-size: 11px; line-height: 18px; text-align: center; }
+  .tabbar-count:empty { min-width: 10px; width: 10px; height: 10px; padding: 0; top: 6px; }
+  .more-sheet:not([hidden]) { display: block; position: fixed; inset: 0; z-index: 45; background: var(--ground); overflow-y: auto; padding: 0 16px 120px; }
+  .more-head { display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: var(--ground); padding: 14px 0 6px; font-size: 18px; }
+  .more-sheet a, .more-sheet .more-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; padding: 14px 16px; margin-bottom: 6px;
+    background: var(--white); border: 0; border-radius: 12px; color: var(--navy); text-decoration: none; font: inherit; font-size: 16px; text-align: left; cursor: pointer; }
+  .more-sheet a[aria-current="page"] { box-shadow: inset 3px 0 0 var(--coral); font-weight: 700; }
+  .more-sheet .admin-nav-group { padding: 16px 4px 6px; margin: 0; }
+  body.more-open { overflow: hidden; }
+  /* The save bar and messages sit just above the bottom bar. */
+  body.has-unsaved .admin-tabbar { display: none; }
+  .save-bar .wrap { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+  .toast { bottom: calc(76px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 760px) {
+  /* Orders as cards: no sideways scrolling. */
+  #orders .table-wrap { display: none; }
+  .order-cards { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+  .order-card { background: var(--white); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 6px; font-size: 15px; }
+  .order-card.pending { border-left: 4px solid #E0A23B; }
+  .order-card.unpaid { background: #FBEDEA; }
+  .oc-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 16px; }
+  .oc-who { font-weight: 600; overflow-wrap: anywhere; }
+  .oc-line { color: var(--navy); overflow-wrap: anywhere; }
+  .oc-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .order-card .unpaid-note { margin-top: 0; }
+  .oc-actions { display: flex; gap: 8px; margin-top: 6px; }
+  .oc-actions .btn { flex: 1; }
+  .oc-actions select { flex: 1; min-width: 0; }
+  /* The long explanation hides behind "How orders work". */
+  #orders-sub { display: none; }
+  #orders.show-how #orders-sub { display: block; }
+  .orders-how { display: inline-block; padding: 0; margin-top: 4px; }
+  .orders-search { max-width: none; }
+}
+@media (max-width: 900px) { .more-sheet .admin-nav-group { display: block; } }
+@media (max-width: 760px) {
+  .dash-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .dash-tile { padding: 12px; }
+  .admin-main > .panel-card { padding: 20px 16px; }
+}
+@media (max-width: 760px) {
+  /* Save bar: the message, then Discard and Save side by side (Preview is at the top of every settings page). */
+  .save-bar .wrap { gap: 8px; padding-top: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+  .save-bar #save-bar-text { flex: 1 1 100%; font-size: 14px; }
+  .save-bar .row-gap { flex: 1 1 100%; flex-wrap: nowrap; }
+  .save-bar [data-preview] { display: none; }
+  .save-bar .row-gap .btn { flex: 1; }
+}
+textarea.input { overflow-y: hidden; min-height: 3em; }
+textarea.input.one-line { min-height: 0; resize: none; line-height: 1.4; }
+/* Help guide */
+.help-search { margin: 8px 0 14px; max-width: 460px; }
+.help-sec .rv-h { margin-top: 22px; }
+.help-item { border-bottom: 1px solid var(--line); }
+.help-item summary { cursor: pointer; padding: 12px 4px; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 12px; }
+.help-item summary::-webkit-details-marker { display: none; }
+.help-item summary::after { content: "+"; color: var(--coral); font-weight: 700; }
+.help-item[open] summary::after { content: "–"; }
+.help-a { padding: 0 4px 14px; color: var(--navy); font-size: 15px; }
+.help-a p { margin: 0 0 8px; }
+.help-a ul { margin: 0 0 8px; padding-left: 20px; }
+.help-a li { margin-bottom: 4px; }

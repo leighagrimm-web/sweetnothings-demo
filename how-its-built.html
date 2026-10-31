@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=mvooehfz">
+<link rel="stylesheet" href="styles.css?v=mvwmvpci">
 <style>
   .doc { max-width: 900px; }
   .doc h2 { margin: 48px 0 8px; }
@@ -46,7 +46,7 @@
     <div class="facts">
       <div><b>$0</b><small>a month for hosting, database and email</small></div>
       <div><b>~7,800</b><small>lines of hand-written code, no framework</small></div>
-      <div><b>200+</b><small>automated checks on the server rules</small></div>
+      <div><b>300+</b><small>automated checks on the server rules</small></div>
       <div><b>2</b><small>environments: test and live, kept identical</small></div>
     </div>
   </section>
@@ -55,7 +55,7 @@
     <h2>How the pieces fit</h2>
     <div class="flow">
       <div><strong>Website</strong><span>Static HTML, CSS and JavaScript on Cloudflare Pages. Menu, checkout, classes, contact.</span></div>
-      <div><strong>Server</strong><span>Google Apps Script: checks every order against the rules, sends emails, runs a 5-minute background check.</span></div>
+      <div><strong>Server</strong><span>Google Apps Script: checks every order against the rules, sends emails, runs a 5-minute background check and a daily health check that emails the owner only when something needs fixing.</span></div>
       <div><strong>Data</strong><span>A Google Sheet: orders, messages, settings, codes. The owner can open it like any spreadsheet.</span></div>
       <div><strong>Owner admin</strong><span>Served by Apps Script, only to the owner’s Google account. Its look and logic load from the website.</span></div>
       <div><strong>QuickBooks Online</strong><span>Invoices for cookie orders, with automatic sales tax and an online Pay button.</span></div>
@@ -82,7 +82,7 @@
       <div class="pick"><h3>Speed</h3><p>Settings are remembered in the browser, so return visits open instantly and refresh quietly in the background. First visits fade in once real settings arrive, so customers never see stale prices.</p></div>
       <div class="pick"><h3>Reliability</h3><p>Every rule is enforced twice: in the browser for instant feedback, and on the server so nothing can be bypassed. Orders are protected against double-clicks and dropped connections. A background check every 5 minutes marks invoices paid, expires unpaid class holds, and sends pickup reminders the morning before.</p></div>
       <div class="pick"><h3>Privacy</h3><p>The pickup address only appears in confirmation emails. Customer data stays in her Google account. Payment keys are stored only in the server’s private settings, never in the website.</p></div>
-      <div class="pick"><h3>Testing</h3><p>The server code runs in automated tests with Google’s services stubbed out (over 200 checks covering ordering rules, payments, reminders, emails and phone orders), plus a written end-to-end test plan run on the test site before each release.</p></div>
+      <div class="pick"><h3>Testing</h3><p>The server code runs in automated tests with Google’s services stubbed out (over 300 checks covering ordering rules, payments, reminders, emails and phone orders), plus a written end-to-end test plan run on the test site before each release.</p></div>
       <div class="pick"><h3>Accessible and mobile-first</h3><p>Built for phones first: one-row header, full-width tap targets, no zoom traps. Keyboard focus, labels and screen-reader text throughout.</p></div>
     </div>
 
@@ -100,9 +100,9 @@
     <p style="margin-top:28px"><a class="btn ghost" href="how-it-works.html">← How it works</a></p>
   </section>
 </main>
-<script src="demo/demo-db.js?v=mvooehfz"></script>
-<script src="demo/demo-server.js?v=mvooehfz"></script>
-<script src="config.js?v=mvooehfz"></script>
-<script src="demo/demo-after.js?v=mvooehfz"></script>
+<script src="demo/demo-db.js?v=mvwmvpci"></script>
+<script src="demo/demo-server.js?v=mvwmvpci"></script>
+<script src="config.js?v=mvwmvpci"></script>
+<script src="demo/demo-after.js?v=mvwmvpci"></script>
 </body>
 </html>

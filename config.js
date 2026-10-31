@@ -20,7 +20,7 @@ if (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'Mac
 
 // This copy of the site's code. Bumped on every publish together with the ?v= on the pages and version.json, so a
 // tab left open can tell a newer version is out (see layout.js).
-const SN_BUILD = '20261027u';
+const SN_BUILD = '20261101a';
 
 const SN_ENV = (function () {
   const API = {
@@ -138,7 +138,7 @@ const SN_DEFAULTS = {
     .map((l) => ({ photo: '[' + l + ' cookie photo]', caption: l + ' cookies' }))
 };
 /* LIVE SNAPSHOT START */
-// Live settings as of 2026-10-26 (node .claude/snapshot.js). The Sheet always wins once it answers.
+// Live settings as of 2026-10-31 (node .claude/snapshot.js). The Sheet always wins once it answers.
 Object.assign(SN_DEFAULTS, {
  "acceptingOrders": true,
  "leadDays": 14,
@@ -170,22 +170,22 @@ Object.assign(SN_DEFAULTS, {
  },
  "homeItems": [
   {
-   "link": "mini",
    "name": "Mini artisan",
+   "link": "mini",
    "photo": "https://drive.google.com/file/d/1FwRES_GHzSirQCc_xtX3Kl9vWhhzeg6G/view?usp=drive_link",
    "line": ""
   },
   {
+   "photo": "https://drive.google.com/file/d/1HEZfTu1RtfmPz3D9hi2d6oMivoNZfkOe/view?usp=drive_link",
    "line": "",
    "link": "large",
-   "name": "Large artisan",
-   "photo": "https://drive.google.com/file/d/1HEZfTu1RtfmPz3D9hi2d6oMivoNZfkOe/view?usp=drive_link"
+   "name": "Large artisan"
   },
   {
-   "line": "At pop-ups and events",
    "link": "events",
+   "name": "Cookie kits",
    "photo": "https://drive.google.com/file/d/1BlHGZAJ0M8oz3b-BuSUnvp47CJ37aF7p/view?usp=sharing",
-   "name": "Cookie kits"
+   "line": "At pop-ups and events"
   }
  ],
  "homeSlides": [
@@ -378,7 +378,7 @@ Object.assign(SN_DEFAULTS, {
    "address": "106 S. Emerson St., Mount Prospect, IL",
    "price": 60,
    "max": 18,
-   "desc": "Join us for a fun, hands-on class where you'll learn basic cookie decorating techniques and create this adorable set of 6-fall-themed cookies!\n\nAll supplies included. Step-by-step instruction. No experience needed. Take home (and eat!) your creations.\n\nMust by 12 years or older to participate.",
+   "desc": "Join us for a fun, hands-on class where you'll learn basic cookie decorating techniques and create this adorable set of 6-fall-themed cookies!\n\nAll supplies included. Step-by-step instruction. No experience needed. Take home (and eat!) your creations.\n\nMust be 12 years or older to participate.",
    "photo": "https://drive.google.com/file/d/1r01WNCMsYuTcFPB9FyRbiFubL_qbehvC/view?usp=drive_link",
    "when": "",
    "button": "Add to bag",
@@ -545,6 +545,21 @@ Object.assign(SN_DEFAULTS, {
 });
 /* LIVE SNAPSHOT END */
 
+// A Drive photo that doesn't load from Google's photo server gets one more try through Drive's thumbnail address.
+document.addEventListener('error', (e) => {
+  const img = e.target;
+  if (!img || img.tagName !== 'IMG' || img.dataset.photoRetry) return;
+  const m = String(img.src).match(/lh3\.googleusercontent\.com\/d\/([\w-]{10,})/);
+  if (!m) return;
+  img.dataset.photoRetry = '1';
+  img.src = 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w1600';
+}, true);
+
+// Only the live site belongs in search results; the test site and preview addresses ask not to be indexed.
+if (!/^(www\.)?sweetnothingsbym\.com$/.test(location.hostname) && !document.querySelector('meta[name="robots"]')) {
+  const m = document.createElement('meta'); m.name = 'robots'; m.content = 'noindex'; document.head.appendChild(m);
+}
+
 const SN = {
   clone(o) { return JSON.parse(JSON.stringify(o)); },
 
@@ -611,11 +626,16 @@ const SN = {
         h.setAttribute('aria-live', 'polite');
         input.insertAdjacentElement('afterend', h);
       }
+      // Same suggestion already showing: leave it alone (rebuilding it swallowed the first tap on Use it).
+      if (!h.hidden && h.dataset.fix === fix) return;
+      h.dataset.fix = fix;
       h.innerHTML = '<strong>Are you sure? This email looks like it has a typo.</strong> Did you mean ' + SN.esc(fix) + '? <button type="button" class="link-btn" data-email-fix="' + SN.esc(fix) + '">Use it</button>';
       h.hidden = false;
     };
     document.addEventListener('input', (e) => { if (e.target.type === 'email' && e.target.id) hintFor(e.target); });
     document.addEventListener('focusout', (e) => { if (e.target.type === 'email' && e.target.id) hintFor(e.target); });
+    // Tapping Use it shouldn't take focus off the email box first (that's what made it need two taps).
+    document.addEventListener('mousedown', (e) => { if (e.target.closest('[data-email-fix]')) e.preventDefault(); });
     document.addEventListener('click', (e) => {
       const b = e.target.closest('[data-email-fix]');
       if (!b) return;
@@ -814,11 +834,15 @@ const SN = {
     const s = String(v || '').trim();
     if (!s || s[0] === '[') return '';
     const m = s.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=\w+&)?id=)([\w-]{10,})/);
-    if (m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w1600';
+    // Straight from Google's photo server: Drive's own thumbnail address redirects there, and iPhone Safari blocks
+    // that hop inside the admin (Apps Script) page. A photo that still won't load retries Drive's address (top of file).
+    if (m) return 'https://lh3.googleusercontent.com/d/' + m[1] + '=w1600';
     return /^(https?:)?\/\//.test(s) || /^[\w./-]+\.(jpe?g|png|webp|gif|avif)$/i.test(s) ? s : '';
   },
   // The [placeholder] label for a photo cell, or ''.
   photoPlaceholder(v) { const s = String(v || '').trim(); return s[0] === '[' ? s : ''; },
+  // What a gallery photo shows, for Google and screen readers: "Poker" becomes "Poker custom cookies by Sweet Nothings by M".
+  photoAlt(caption) { const c = String(caption || '').trim(); return (c ? (/cookie/i.test(c) ? c : c + ' custom cookies') : 'Custom cookies') + ' by Sweet Nothings by M'; },
   // A photo cell as HTML: the image, a placeholder box, or '' when blank. style applies to either.
   photoHtml(v, alt, style) {
     const url = SN.photoUrl(v), ph = SN.photoPlaceholder(v);

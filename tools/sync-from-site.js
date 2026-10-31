@@ -19,6 +19,9 @@ const put = (name, data) => { fs.writeFileSync(path.join(OUT, name), data); chan
 
 pages.forEach((f) => {
   let s = fs.readFileSync(path.join(SITE, f), 'utf8');
+  // The live site's search and sharing tags point at sweetnothingsbym.com; the demo shouldn't claim to be it.
+  s = s.replace(/<link rel="canonical"[^>]*>\r?\n?/g, '').replace(/<meta property="og:[^>]*>\r?\n?/g, '')
+    .replace(/<script type="application\/ld\+json"[\s\S]*?<\/script>\r?\n?/g, '');
   if (!/name="robots"/.test(s)) s = s.replace(/(<meta name="viewport"[^>]*>)/, '$1\n<meta name="robots" content="noindex">');
   if (s.indexOf('demo/demo-server.js') === -1) {
     s = s.replace(/(<script src="config\.js[^"]*"><\/script>)/,
@@ -37,7 +40,10 @@ ASSETS.forEach((f) => {
   }
   if (f === 'admin.js') {
     // The admin's "test Sheet" strip becomes a short guide for demo visitors.
-    const s = data.toString('utf8');
+    let s = data.toString('utf8');
+    // No real Apps Script behind the demo, so it's never out of date.
+    if (s.indexOf("String(cfg.codeVersion || '') < NEEDS_CODE") === -1) throw new Error('admin.js: code version check not found');
+    s = s.replace("String(cfg.codeVersion || '') < NEEDS_CODE", 'false');
     const from = 'Test admin: connected to the test Sheet. Emails go out with [TEST] in the subject.';
     if (s.indexOf(from) === -1) throw new Error('admin.js: test strip text not found');
     data = s.replace(from, 'Demo admin: try reviewing and approving an order, replying to a message, adding a phone order or changing a setting, then look at the customer site.');

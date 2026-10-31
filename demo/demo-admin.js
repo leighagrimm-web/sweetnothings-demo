@@ -103,17 +103,21 @@
     adminPayments: () => ({
       qb: { keys: true, env: 'demo', connected: true, company: 'Sweet Nothings (demo company)', items: { custom: '1' }, error: '' },
       square: { ready: true, env: 'demo', location: 'Sweet Nothings (demo location)', error: '' },
-      lastCheck: { at: now(), invoicesPaid: [], classesPaid: [], expired: [], errors: [] },
-      trigger: true, callbackUrl: ''
+      lastCheck: { at: now(), invoicesPaid: [], classesPaid: [], expired: [], completed: [], errors: [] },
+      trigger: true, healthTrigger: true, callbackUrl: ''
     }),
     adminQbConnectUrl: () => '#demo',
     adminQbDisconnect: () => ({ ok: true }),
     adminQbSetupItems: () => ({ ok: true, items: {} }),
     // In the demo, "Check payments now" pretends every open invoice was just paid in QuickBooks.
+    // The morning health check: in the demo everything is always working.
+    adminRunHealthCheck: () => ({ at: now(), problems: [] }),
+    // Refresh website: the demo site re-reads settings on its next page.
+    adminRefreshSite: () => { try { localStorage.removeItem('sn_live_cfg_v2'); } catch (e) { /* ignore */ } return { ok: true }; },
     adminCheckPaymentsNow: () => {
       const paid = db.orders.filter((o) => o.status === 'Invoice sent' && o.invoice && o.invoice.qb);
       paid.forEach((o) => { o.status = 'Paid'; o.invoice.qb.balance = 0; });
-      return { ok: true, invoicesPaid: paid.map((o) => o.number), classesPaid: [], expired: [], errors: [] };
+      return { ok: true, invoicesPaid: paid.map((o) => o.number), classesPaid: [], expired: [], completed: [], errors: [] };
     },
     adminRetryInvoice: (n) => { const o = find(n); delete o.invoice.qbError; o.invoice.qb = fakeQb(o, o.invoice.total); return { ok: true, order: SN.clone(o), weekCounts: weeks() }; },
     // Inspiration photos: the ones demo visitors uploaded, else a soft placeholder.

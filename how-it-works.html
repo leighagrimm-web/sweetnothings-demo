@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=mvooehfz">
+<link rel="stylesheet" href="styles.css?v=mvwmvpci">
 <style>
   .doc { max-width: 860px; }
   .doc h2 { margin: 44px 0 6px; }
@@ -80,7 +80,12 @@
         <p><strong>Approve &amp; email</strong> creates a real <strong>QuickBooks invoice</strong> and emails the confirmation with a Pay button. <strong>Decline</strong> sends a kind note instead. Nothing is charged until she approves.</p>
       </div></details>
       <details class="faq"><summary>How do orders get marked paid?</summary><div class="faq-a">
-        <p>Every 5 minutes the server checks QuickBooks and Square and marks paid orders <strong>Paid</strong> on its own. From there she moves an order through Baking, Ready and Completed. Cancelling an approved order voids its unpaid invoice and puts any gift card amount back.</p>
+        <p>Every 5 minutes the server checks QuickBooks and Square and marks paid orders <strong>Paid</strong> on its own. She can mark Baking and Ready for her own tracking, and the night after an order's date, paid orders and class bookings move to <strong>Completed</strong> by themselves. Unpaid ones stay open so she notices them. Cancelling an approved order voids its unpaid invoice and puts any gift card amount back.</p>
+        <p><span class="tag">Rule</span>Cookie orders are paid a week before their date. If an approved order is still unpaid 7 days out, the customer gets <strong>one</strong> friendly reminder with the Pay button, and the order turns light red in her list with "Unpaid · X days to go".</p>
+      </div></details>
+      <details class="faq"><summary>Finding orders, on a computer or her phone</summary><div class="faq-a">
+        <p>Orders has <strong>Active</strong> and <strong>Past</strong> tabs and a search box that matches names, emails, partial phone numbers, order numbers, occasions and ZIP codes (and points to matches on the other tab).</p>
+        <p>On a phone the admin works like an app: a bottom bar for Dashboard, Orders and Messages with their counts, <strong>More</strong> for everything else, orders as cards instead of a wide table, and text boxes that grow to show everything.</p>
       </div></details>
       <details class="faq"><summary>Pickup and drop-off times, and reminders</summary><div class="faq-a">
         <p>Once she's agreed a time with the customer, <strong>Set pickup time</strong> emails it with the address (or their drop-off address) and her cell. On the <strong>morning before</strong> (8 AM), the customer gets a reminder automatically. It goes out only once, and is skipped if the time was set for the next day.</p>
@@ -93,7 +98,7 @@
         <ul>
           <li><strong>Message the customer</strong> (the email includes the order summary; replies come straight to her).</li>
           <li><strong>Change the date</strong>, with or without telling the customer.</li>
-          <li>The dashboard shows the week's bake list, totals against her limits, and anything that needs attention.</li>
+          <li>The dashboard shows the week's bake list, totals against her limits, one card per class (tap it to see who's booked and who's paid), and anything that needs attention.</li>
         </ul>
       </div></details>
     </div>
@@ -113,6 +118,7 @@
     <div class="faq-list">
       <details class="faq"><summary>How do customer messages work?</summary><div class="faq-a">
         <p>The Contact page (with topics like Rush order and photos) and a quick "Message me" pop-up both land in the admin's <strong>Messages</strong> tab and in her inbox. She can reply from the admin (it quotes their message and goes out from the shop's email) or open a ready-made reply in Gmail.</p>
+        <p>The customer gets a <strong>"We got your message"</strong> email right away, with a copy of what they sent and "I'll reply within 1–2 days" (at most one an hour per address, so the form can't be used to flood someone's inbox).</p>
       </div></details>
     </div>
 
@@ -124,18 +130,26 @@
           <li>Prices, minimums, flavor list and limits, lead time, weekly limits, blocked dates, drop-off ZIPs and fees, and codes.</li>
           <li><strong>Preview changes</strong> shows the site with her edits before customers see them.</li>
           <li><strong>Maintenance mode</strong> shows visitors a "back soon" page while she (with a password) can still use the site.</li>
+          <li><strong>Two people can edit at once</strong>: Save only saves what changed, merged with everyone else's saves; she's told when someone else saves, and asked only if they both changed the same thing.</li>
+          <li><strong>Help → How things work</strong> is a searchable plain-language guide to every task and rule, and <strong>What's new</strong> explains each update.</li>
         </ul>
       </div></details>
+      <details class="faq"><summary>What if something breaks?</summary><div class="faq-a">
+        <p>A <strong>daily health check</strong> at 7 AM checks QuickBooks (including the 5-year sign-in), Square, the payment check, failed emails and Google's daily limits. Only when something's wrong does it email her (and Leigha) in plain words with how to fix it, once a day, then one "all clear" when it's fixed. The admin shows a red box meanwhile.</p>
+      </div></details>
+      <details class="faq"><summary>How do people find the bakery?</summary><div class="faq-a">
+        <p>The live site tells Google it's a bakery in Rosemont, IL that delivers to the towns in her drop-off zones (no street address), with a sitemap, clear titles and photo descriptions. The test site and this demo ask search engines not to index them.</p>
+      </div></details>
       <details class="faq"><summary>How are updates tested?</summary><div class="faq-a">
-        <p>There's a separate <strong>test site</strong> with its own test Sheet, test QuickBooks and Square sandbox. Every change goes there first and runs through a written test plan, and automated tests cover the server rules (over 200 checks). Only then is it promoted to the live site.</p>
+        <p>There's a separate <strong>test site</strong> with its own test Sheet, test QuickBooks and Square sandbox. Every change goes there first and runs through a written test plan, and automated tests cover the server rules (over 300 checks). Only then is it promoted to the live site.</p>
       </div></details>
     </div>
     <p style="margin-top:40px"><a class="btn" href="how-its-built.html">How it’s built →</a></p>
   </section>
 </main>
-<script src="demo/demo-db.js?v=mvooehfz"></script>
-<script src="demo/demo-server.js?v=mvooehfz"></script>
-<script src="config.js?v=mvooehfz"></script>
-<script src="demo/demo-after.js?v=mvooehfz"></script>
+<script src="demo/demo-db.js?v=mvwmvpci"></script>
+<script src="demo/demo-server.js?v=mvwmvpci"></script>
+<script src="config.js?v=mvwmvpci"></script>
+<script src="demo/demo-after.js?v=mvwmvpci"></script>
 </body>
 </html>
